@@ -1,0 +1,385 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Infra Gestión</title>
+
+  <link rel="stylesheet" href="./styles.css"/>
+
+  <!-- Google Identity Services -->
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
+</head>
+
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <div class="brand-mark" aria-hidden="true">IG</div>
+      <div class="brand-text">
+        <div class="brand-title">Infra Gestión</div>
+        <div class="brand-subtitle">Sistema de gestiones</div>
+      </div>
+    </div>
+
+    <div class="topbar-right">
+      <div id="userBox" class="userbox"></div>
+      <button id="btnLogout" class="btn ghost hidden" type="button">Salir</button>
+    </div>
+  </header>
+
+  <main class="container">
+
+    <!-- LOGIN -->
+    <section id="loginSection" class="card card-lg">
+      <div class="card-head">
+        <h2 class="h2">Ingresar</h2>
+        <p class="hint">Acceso solo por lista blanca.</p>
+      </div>
+
+      <div class="login-body">
+        <div id="googleBtn" class="google-btn"></div>
+        <p id="loginStatus" class="hint hidden"></p>
+        <p id="loginError" class="error hidden"></p>
+      </div>
+    </section>
+
+    <!-- APP -->
+    <section id="appSection" class="hidden">
+      <p id="appError" class="error hidden"></p>
+
+      <!-- NAV TABS -->
+      <div class="tabs card">
+        <button class="tab active" id="tab-gestiones" type="button" data-view="gestiones">
+          <span class="tab-dot" aria-hidden="true"></span>
+          Gestiones
+        </button>
+
+        <button class="tab" id="tab-tablero" type="button" data-view="tablero">
+          Tablero
+        </button>
+
+        <button class="tab hidden" id="tab-usuarios" type="button" data-view="usuarios">
+          Usuarios
+          <span class="pill" id="pillAdmin" title="Solo Admin">Admin</span>
+        </button>
+      </div>
+
+      <!-- VIEW: GESTIONES -->
+      <section id="view-gestiones" class="view">
+        <div class="toolbar card">
+          <div class="toolbar-left">
+            <button class="btn" type="button" onclick="loadGestiones(true)">Refrescar</button>
+            <button class="btn primary" type="button" onclick="openNew()">Nueva gestión</button>
+          </div>
+
+          <div class="toolbar-filters">
+            <div class="field">
+              <label for="estadoFilter">Estado</label>
+              <select id="estadoFilter"><option value="">(Todos)</option></select>
+            </div>
+
+            <div class="field">
+              <label for="ministerioFilter">Ministerio</label>
+              <select id="ministerioFilter"><option value="">(Todos)</option></select>
+            </div>
+
+            <div class="field">
+              <label for="categoriaFilter">Categoría</label>
+              <select id="categoriaFilter"><option value="">(Todos)</option></select>
+            </div>
+
+            <!-- ✅ NUEVOS FILTROS -->
+            <div class="field">
+              <label for="tipoGestionFilter">Tipo</label>
+              <select id="tipoGestionFilter"><option value="">(Todos)</option></select>
+            </div>
+
+            <div class="field">
+              <label for="canalOrigenFilter">Canal origen</label>
+              <select id="canalOrigenFilter"><option value="">(Todos)</option></select>
+            </div>
+
+            <div class="field">
+              <label for="departamentoFilter">Departamento</label>
+              <select id="departamentoFilter"><option value="">(Todos)</option></select>
+            </div>
+
+            <div class="field">
+              <label for="localidadFilter">Localidad</label>
+              <select id="localidadFilter" disabled>
+                <option value="">(Todas)</option>
+              </select>
+            </div>
+
+            <div class="field">
+              <label for="searchInput">Buscar</label>
+              <input id="searchInput" type="search" placeholder="Buscar en toda la tabla..." />
+            </div>
+          </div>
+        </div>
+
+        <div class="subbar">
+          <div id="pagerInfo" class="hint"></div>
+
+          <div class="pager">
+            <button class="btn" id="btnPrev" type="button">Anterior</button>
+            <button class="btn" id="btnNext" type="button">Siguiente</button>
+          </div>
+
+          <div class="hint" id="hintTable">Tip: podés scrollear horizontalmente en celular.</div>
+        </div>
+
+        <div class="table-wrap">
+          <table class="grid" id="grid"></table>
+        </div>
+      </section>
+
+      <!-- VIEW: TABLERO -->
+      <section id="view-tablero" class="view hidden">
+        <div class="card">
+          <div class="card-head row">
+            <h3 class="h3">Tablero</h3>
+            <p class="hint">Vista embebida de Looker Studio.</p>
+          </div>
+
+          <div class="iframe-wrap">
+            <iframe
+              id="dashboardFrame"
+              src="https://lookerstudio.google.com/embed/reporting/f9dc4a4e-a174-45a8-938c-385f4121f689/page/fP1fF"
+              allowfullscreen
+              sandbox="allow-storage-access-by-user-activation allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox"
+            ></iframe>
+          </div>
+        </div>
+      </section>
+
+      <!-- VIEW: USUARIOS (solo Admin) -->
+      <section id="view-usuarios" class="view hidden">
+        <div class="card">
+          <div class="card-head row">
+            <h3 class="h3">Usuarios</h3>
+            <p class="hint">Alta / edición de roles y activación.</p>
+          </div>
+
+          <div class="users-layout">
+            <div class="users-form">
+              <h4 class="h4">Crear / actualizar</h4>
+
+              <div class="form-grid form-grid-1">
+                <label>Email *
+                  <input id="u_email" type="email" placeholder="usuario@dominio.com" autocomplete="off" />
+                </label>
+
+                <label>Nombre
+                  <input id="u_nombre" type="text" placeholder="Nombre y apellido" autocomplete="off" />
+                </label>
+
+                <label>Rol *
+                  <select id="u_rol">
+                    <option value="">(Seleccionar)</option>
+                    <option value="Admin">Admin</option>
+                    <option value="Supervisor">Supervisor</option>
+                    <option value="Operador">Operador</option>
+                    <option value="Consulta">Consulta</option>
+                  </select>
+                </label>
+
+                <label class="check">
+                  <input id="u_activo" type="checkbox" checked />
+                  Activo
+                </label>
+              </div>
+
+              <div class="actions-row">
+                <button class="btn primary" type="button" onclick="upsertUser()">Guardar</button>
+                <button class="btn" type="button" onclick="clearUserForm()">Limpiar</button>
+              </div>
+
+              <p class="hint" id="usersHint"></p>
+              <p class="error hidden" id="usersError"></p>
+            </div>
+
+            <div class="users-list">
+              <div class="row between">
+                <h4 class="h4">Listado</h4>
+                <button class="btn" type="button" onclick="loadUsers()">Refrescar</button>
+              </div>
+
+              <div class="table-wrap">
+                <table class="grid" id="usersGrid"></table>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- DRAWER: DETALLE -->
+      <div id="drawer" class="drawer hidden" aria-hidden="true">
+        <div class="drawer-overlay" onclick="closeDrawer()"></div>
+        <aside class="drawer-panel" role="dialog" aria-modal="true">
+          <div class="drawer-head">
+            <div>
+              <div class="drawer-title" id="drawerTitle">Detalle</div>
+              <div class="drawer-sub" id="drawerSub"></div>
+            </div>
+            <button class="btn" type="button" onclick="closeDrawer()">Cerrar</button>
+          </div>
+
+          <div class="drawer-body">
+            <div class="drawer-section">
+              <h4 class="h4">Resumen</h4>
+              <div id="drawerSummary" class="kv"></div>
+            </div>
+
+            <div class="drawer-section">
+              <h4 class="h4">Movimientos</h4>
+              <div id="drawerEventos" class="timeline"></div>
+            </div>
+          </div>
+        </aside>
+      </div>
+
+      <!-- MODAL: NUEVA GESTION -->
+      <div id="modalNewGestion" class="modal hidden" role="dialog" aria-modal="true" aria-hidden="true">
+        <div class="modal-overlay" onclick="closeModal('modalNewGestion')"></div>
+        <div class="modal-card" role="document">
+          <div class="modal-head">
+            <h3 class="h3">Nueva gestión</h3>
+
+            <!-- ✅ Botón X arriba derecha -->
+            <button class="btn ghost modal-x" type="button" onclick="closeModal('modalNewGestion')" aria-label="Cerrar">✕</button>
+          </div>
+
+          <div class="form-grid">
+            <label>Ministerio/Agencia
+              <select id="ng_ministerio"></select>
+            </label>
+
+            <label>Categoría
+              <select id="ng_categoria"></select>
+            </label>
+
+            <label>Urgencia
+              <select id="ng_urgencia"></select>
+            </label>
+
+            <!-- ✅ NUEVOS CAMPOS -->
+            <label>Tipo de gestión
+              <select id="ng_tipo_gestion">
+                <option value="">(Seleccionar)</option>
+              </select>
+            </label>
+
+            <label>Canal origen
+              <select id="ng_canal_origen">
+                <option value="">(Seleccionar)</option>
+              </select>
+            </label>
+
+            <label>Departamento
+              <select id="ng_departamento"></select>
+            </label>
+
+            <label>Localidad
+              <select id="ng_localidad">
+                <option value="">(Seleccionar)</option>
+              </select>
+            </label>
+
+            <label>Dirección
+              <input id="ng_direccion" type="text" placeholder="Calle y número (opcional)" />
+            </label>
+
+            <label>Organismo
+              <input id="ng_organismo_id" type="text" placeholder="organismo_id" />
+            </label>
+
+            <label>Costo
+              <input id="ng_costo_estimado" type="number" step="any" placeholder="Solo número" />
+            </label>
+
+            <label>Moneda
+              <select id="ng_costo_moneda">
+                <option value="ARS">Pesos (ARS)</option>
+                <option value="USD">USD</option>
+                <option value="OTRA">Otra</option>
+              </select>
+            </label>
+
+            <label class="span-2">Sticker nro de expediente
+              <input id="ng_nro_expediente" type="text" placeholder="Ej: EXP-2026-..." />
+            </label>
+
+            <!-- ✅ ORDEN CORREGIDO: Detalle arriba -->
+            <label class="span-2">Detalle *
+              <textarea id="ng_detalle" rows="4" placeholder="Describí la demanda"></textarea>
+            </label>
+
+            <label class="span-2">Subtipo Detalle
+              <textarea id="ng_subtipo_detalle" rows="3" placeholder="Explicá lo específico de la obra"></textarea>
+            </label>
+
+            <label class="span-2">Observaciones
+              <textarea id="ng_observaciones" rows="3" placeholder="Opcional"></textarea>
+            </label>
+          </div>
+
+          <div class="modal-actions">
+            <button class="btn primary" type="button" onclick="submitNewGestion()">Crear</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- MODAL: CAMBIAR ESTADO -->
+      <div id="modalChangeState" class="modal hidden" role="dialog" aria-modal="true" aria-hidden="true">
+        <div class="modal-overlay" onclick="closeModal('modalChangeState')"></div>
+        <div class="modal-card" role="document">
+          <div class="modal-head">
+            <h3 class="h3">Modificar estado</h3>
+            <button class="btn ghost modal-x" type="button" onclick="closeModal('modalChangeState')" aria-label="Cerrar">✕</button>
+          </div>
+
+          <input id="cs_id_gestion" type="hidden" />
+
+          <div class="form-grid">
+            <label>Estado
+              <select id="cs_nuevo_estado"></select>
+            </label>
+
+            <label>Derivado a
+              <input id="cs_derivado_a" type="text" placeholder="Área / persona / organismo" />
+            </label>
+
+            <label class="span-2">Acciones implementadas
+              <textarea id="cs_acciones_implementadas" rows="3" placeholder="Qué se hizo / pasos realizados"></textarea>
+            </label>
+
+            <label class="span-2">Comentario (obligatorio en ARCHIVADO / NO REMITE SUAC)
+              <textarea id="cs_comentario" rows="3" placeholder="Opcional según reglas"></textarea>
+            </label>
+          </div>
+
+          <div class="modal-actions">
+            <button class="btn primary" type="button" onclick="submitChangeState()">Guardar</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- MODAL: EVENTOS -->
+      <div id="modalEventos" class="modal hidden" role="dialog" aria-modal="true" aria-hidden="true">
+        <div class="modal-overlay" onclick="closeModal('modalEventos')"></div>
+        <div class="modal-card" role="document">
+          <div class="modal-head">
+            <h3 class="h3" id="ev_title">Eventos</h3>
+            <button class="btn ghost modal-x" type="button" onclick="closeModal('modalEventos')" aria-label="Cerrar">✕</button>
+          </div>
+          <pre id="ev_body" class="pre"></pre>
+        </div>
+      </div>
+
+    </section>
+  </main>
+
+  <script src="./app.js"></script>
+</body>
+</html>
