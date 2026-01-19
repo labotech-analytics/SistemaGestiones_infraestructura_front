@@ -381,8 +381,54 @@ function openPopover(btnId, panelId) {
     btn.setAttribute("aria-expanded", "false");
     return;
   }
+
+  // Posicionamiento robusto: evita que el panel salga del viewport.
+  // Usamos position:fixed + coordenadas calculadas desde el botón.
   panel.classList.remove("hidden");
   btn.setAttribute("aria-expanded", "true");
+
+  const place = () => {
+    try {
+      const r = btn.getBoundingClientRect();
+
+      // Forzamos fixed para que SIEMPRE se limite al viewport.
+      const pad = 8;
+      panel.style.position = "fixed";
+      panel.style.right = "auto";
+      panel.style.transform = "none";
+      panel.style.maxWidth = `calc(100vw - ${pad * 2}px)`;
+      panel.style.maxHeight = `calc(100vh - ${pad * 2}px)`;
+      panel.style.overflow = "auto";
+
+      // Colocamos un punto inicial para medir sin que se vaya fuera.
+      panel.style.left = `${pad}px`;
+      panel.style.top = `${Math.round(r.bottom + 8)}px`;
+
+      const rect = panel.getBoundingClientRect();
+      const w = rect.width || 360;
+      const h = rect.height || 240;
+
+      const vw = window.innerWidth || 1200;
+      const vh = window.innerHeight || 800;
+
+      // Preferimos alinear el borde derecho del panel al borde derecho del botón.
+      let left = r.right - w;
+      left = Math.max(pad, Math.min(left, vw - w - pad));
+
+      // Debajo del botón, o arriba si no entra.
+      let top = r.bottom + 8;
+      if (top + h > vh - pad) top = Math.max(pad, r.top - h - 8);
+
+      panel.style.left = `${Math.round(left)}px`;
+      panel.style.top = `${Math.round(top)}px`;
+    } catch {
+      // si falla, dejamos el CSS por defecto
+    }
+  };
+
+  // Colocar 2 veces: inmediato + en el siguiente frame (por si el browser ajusta width)
+  place();
+  requestAnimationFrame(place);
 }
 
 function closePopover(btnId, panelId) {
