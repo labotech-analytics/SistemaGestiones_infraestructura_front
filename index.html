@@ -3,6 +3,8 @@
 <head>
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <meta name="color-scheme" content="light dark">
+  <meta name="theme-color" content="#0f172a">
   <title>Infra Gestión</title>
 
   <link rel="stylesheet" href="./styles.css"/>
@@ -12,7 +14,9 @@
 </head>
 
 <body>
-  <header class="topbar">
+  <a class="skip-link" href="#main">Saltar al contenido</a>
+
+  <header class="topbar" role="banner">
     <div class="brand">
       <div class="brand-mark" aria-hidden="true">IG</div>
       <div class="brand-text">
@@ -22,15 +26,15 @@
     </div>
 
     <div class="topbar-right">
-      <div id="userBox" class="userbox"></div>
+      <div id="userBox" class="userbox" aria-live="polite"></div>
       <button id="btnLogout" class="btn ghost hidden" type="button">Salir</button>
     </div>
   </header>
 
-  <main class="container">
+  <main id="main" class="container" role="main">
 
     <!-- LOGIN -->
-    <section id="loginSection" class="card card-lg">
+    <section id="loginSection" class="card card-lg" aria-label="Ingreso">
       <div class="card-head">
         <h2 class="h2">Ingresar</h2>
         <p class="hint">Acceso solo por lista blanca.</p>
@@ -39,40 +43,57 @@
       <div class="login-body">
         <div id="googleBtn" class="google-btn"></div>
         <p id="loginStatus" class="hint hidden"></p>
-        <p id="loginError" class="error hidden"></p>
+        <p id="loginError" class="error hidden" role="alert"></p>
       </div>
     </section>
 
     <!-- APP -->
-    <section id="appSection" class="hidden">
-      <p id="appError" class="error hidden"></p>
+    <section id="appSection" class="hidden" aria-label="Aplicación">
+      <p id="appError" class="error hidden" role="alert"></p>
 
       <!-- NAV TABS -->
-      <div class="tabs card">
-        <button class="tab active" id="tab-gestiones" type="button" data-view="gestiones">
+      <div class="tabs card" role="tablist" aria-label="Vistas">
+        <button class="tab active" id="tab-gestiones" type="button" data-view="gestiones" role="tab" aria-controls="view-gestiones">
           <span class="tab-dot" aria-hidden="true"></span>
           Gestiones
         </button>
 
-        <button class="tab" id="tab-tablero" type="button" data-view="tablero">
+        <button class="tab" id="tab-tablero" type="button" data-view="tablero" role="tab" aria-controls="view-tablero">
           Tablero
         </button>
 
-        <button class="tab hidden" id="tab-usuarios" type="button" data-view="usuarios">
+        <button class="tab hidden" id="tab-usuarios" type="button" data-view="usuarios" role="tab" aria-controls="view-usuarios">
           Usuarios
           <span class="pill" id="pillAdmin" title="Solo Admin">Admin</span>
         </button>
       </div>
 
       <!-- VIEW: GESTIONES -->
-      <section id="view-gestiones" class="view">
+      <section id="view-gestiones" class="view" role="tabpanel" aria-labelledby="tab-gestiones">
         <div class="toolbar card">
           <div class="toolbar-left">
             <button class="btn" type="button" onclick="loadGestiones(true)">Refrescar</button>
             <button class="btn primary" type="button" onclick="openNew()">Nueva gestión</button>
+
+            <!-- Selector de columnas -->
+            <div class="popover">
+              <button id="btnColumns" class="btn" type="button" aria-haspopup="true" aria-expanded="false">Columnas</button>
+              <div id="columnsPanel" class="popover-panel hidden" role="menu" aria-label="Selector de columnas">
+                <div class="popover-head">
+                  <div class="popover-title">Columnas visibles</div>
+                  <div class="popover-actions">
+                    <button id="btnColumnsMinimal" class="btn" type="button">Min</button>
+                    <button id="btnColumnsAll" class="btn" type="button">Todo</button>
+                    <button id="btnColumnsReset" class="btn" type="button">Reset</button>
+                  </div>
+                </div>
+                <div id="columnsList" class="columns-list"></div>
+                <div class="hint">Se guarda por usuario (localStorage).</div>
+              </div>
+            </div>
           </div>
 
-          <div class="toolbar-filters">
+          <div class="toolbar-filters" aria-label="Filtros">
             <div class="field">
               <label for="estadoFilter">Estado</label>
               <select id="estadoFilter"><option value="">(Todos)</option></select>
@@ -88,7 +109,6 @@
               <select id="categoriaFilter"><option value="">(Todos)</option></select>
             </div>
 
-            <!-- ✅ NUEVOS FILTROS -->
             <div class="field">
               <label for="tipoGestionFilter">Tipo</label>
               <select id="tipoGestionFilter"><option value="">(Todos)</option></select>
@@ -111,7 +131,7 @@
               </select>
             </div>
 
-            <div class="field">
+            <div class="field field-search">
               <label for="searchInput">Buscar</label>
               <input id="searchInput" type="search" placeholder="Buscar en toda la tabla..." />
             </div>
@@ -119,42 +139,47 @@
         </div>
 
         <div class="subbar">
-          <div id="pagerInfo" class="hint"></div>
+          <div id="pagerInfo" class="hint" aria-live="polite"></div>
 
           <div class="pager">
             <button class="btn" id="btnPrev" type="button">Anterior</button>
             <button class="btn" id="btnNext" type="button">Siguiente</button>
           </div>
 
-          <div class="hint" id="hintTable">Tip: podés scrollear horizontalmente en celular.</div>
+          <div class="hint" id="hintTable">Tip: en pantallas chicas podés ocultar columnas desde “Columnas”.</div>
         </div>
 
-        <div class="table-wrap">
+        <div class="table-wrap" aria-label="Tabla de gestiones">
           <table class="grid" id="grid"></table>
         </div>
       </section>
 
       <!-- VIEW: TABLERO -->
-      <section id="view-tablero" class="view hidden">
+      <section id="view-tablero" class="view hidden" role="tabpanel" aria-labelledby="tab-tablero">
         <div class="card">
           <div class="card-head row">
-            <h3 class="h3">Tablero</h3>
-            <p class="hint">Vista embebida de Looker Studio.</p>
+            <div>
+              <h3 class="h3">Tablero</h3>
+              <p class="hint">Vista embebida de Looker Studio.</p>
+            </div>
+            <button id="btnReloadDashboard" class="btn" type="button">Recargar tablero</button>
           </div>
 
           <div class="iframe-wrap">
             <iframe
               id="dashboardFrame"
+              data-src="https://lookerstudio.google.com/embed/reporting/f9dc4a4e-a174-45a8-938c-385f4121f689/page/fP1fF"
               src="https://lookerstudio.google.com/embed/reporting/f9dc4a4e-a174-45a8-938c-385f4121f689/page/fP1fF"
               allowfullscreen
               sandbox="allow-storage-access-by-user-activation allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox"
+              title="Tablero Looker Studio"
             ></iframe>
           </div>
         </div>
       </section>
 
       <!-- VIEW: USUARIOS (solo Admin) -->
-      <section id="view-usuarios" class="view hidden">
+      <section id="view-usuarios" class="view hidden" role="tabpanel" aria-labelledby="tab-usuarios">
         <div class="card">
           <div class="card-head row">
             <h3 class="h3">Usuarios</h3>
@@ -196,7 +221,7 @@
               </div>
 
               <p class="hint" id="usersHint"></p>
-              <p class="error hidden" id="usersError"></p>
+              <p class="error hidden" id="usersError" role="alert"></p>
             </div>
 
             <div class="users-list">
@@ -205,7 +230,7 @@
                 <button class="btn" type="button" onclick="loadUsers()">Refrescar</button>
               </div>
 
-              <div class="table-wrap">
+              <div class="table-wrap" aria-label="Tabla de usuarios">
                 <table class="grid" id="usersGrid"></table>
               </div>
             </div>
@@ -216,7 +241,7 @@
       <!-- DRAWER: DETALLE -->
       <div id="drawer" class="drawer hidden" aria-hidden="true">
         <div class="drawer-overlay" onclick="closeDrawer()"></div>
-        <aside class="drawer-panel" role="dialog" aria-modal="true">
+        <aside class="drawer-panel" role="dialog" aria-modal="true" aria-label="Detalle de gestión">
           <div class="drawer-head">
             <div>
               <div class="drawer-title" id="drawerTitle">Detalle</div>
@@ -245,17 +270,15 @@
         <div class="modal-card" role="document">
           <div class="modal-head">
             <h3 class="h3">Nueva gestión</h3>
-
-            <!-- ✅ Botón X arriba derecha -->
             <button class="btn ghost modal-x" type="button" onclick="closeModal('modalNewGestion')" aria-label="Cerrar">✕</button>
           </div>
 
           <div class="form-grid">
-            <label>Ministerio/Agencia
+            <label>Ministerio/Agencia *
               <select id="ng_ministerio"></select>
             </label>
 
-            <label>Categoría
+            <label>Categoría *
               <select id="ng_categoria"></select>
             </label>
 
@@ -263,7 +286,6 @@
               <select id="ng_urgencia"></select>
             </label>
 
-            <!-- ✅ NUEVOS CAMPOS -->
             <label>Tipo de gestión
               <select id="ng_tipo_gestion">
                 <option value="">(Seleccionar)</option>
@@ -276,11 +298,11 @@
               </select>
             </label>
 
-            <label>Departamento
+            <label>Departamento *
               <select id="ng_departamento"></select>
             </label>
 
-            <label>Localidad
+            <label>Localidad *
               <select id="ng_localidad">
                 <option value="">(Seleccionar)</option>
               </select>
@@ -310,7 +332,6 @@
               <input id="ng_nro_expediente" type="text" placeholder="Ej: EXP-2026-..." />
             </label>
 
-            <!-- ✅ ORDEN CORREGIDO: Detalle arriba -->
             <label class="span-2">Detalle *
               <textarea id="ng_detalle" rows="4" placeholder="Describí la demanda"></textarea>
             </label>
@@ -377,6 +398,14 @@
         </div>
       </div>
 
+      <!-- Toasts + Loading -->
+      <div id="toastHost" class="toast-host" aria-live="polite" aria-atomic="true"></div>
+      <div id="globalLoading" class="global-loading hidden" aria-hidden="true">
+        <div class="global-loading-inner">
+          <div class="spinner" aria-hidden="true"></div>
+          <div class="global-loading-text">Cargando…</div>
+        </div>
+      </div>
     </section>
   </main>
 

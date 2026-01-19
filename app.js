@@ -15,6 +15,15 @@ let LAST_SEARCH = "";
 // Usuarios cache
 let LAST_USERS = [];
 
+// Ordenamiento (front)
+let SORT = { key: null, dir: "asc" }; // dir: asc | desc
+
+// Columnas visibles (persistidas por usuario)
+const LS_COLS_KEY = "infra.columns.visible.v1";
+const LS_COL_WIDTH_KEY = "infra.columns.widths.v1";
+let VISIBLE_COLS = new Set();
+let COL_WIDTHS = {};
+
 // Catálogos en memoria
 let CATALOGOS = {
   estados: [],
@@ -24,7 +33,7 @@ let CATALOGOS = {
   departamentos: [],
   localidadesByDepto: new Map(),
 
-  // ✅ Nuevos (por ahora hardcode; si creás endpoints, lo pasamos a backend)
+  // Nuevos (front-only)
   tiposGestion: [],
   canalesOrigen: [],
 };
@@ -34,42 +43,82 @@ let CATALOGOS = {
 // ============================
 function show(el) { el?.classList.remove("hidden"); }
 function hide(el) { el?.classList.add("hidden"); }
-
 function $id(id) { return document.getElementById(id); }
 function setVal(id, v) { const el = $id(id); if (el) el.value = v; }
 function getVal(id, fallback = "") { const el = $id(id); return el ? (el.value ?? fallback) : fallback; }
 
+function escapeHtml(s) {
+  return String(s)
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+}
+
+function toast({ title = "Info", message = "", variant = "ok", ms = 3200 } = {}) {
+  const host = $id("toastHost");
+  if (!host) return;
+  const el = document.createElement("div");
+  el.className = `toast toast--${variant === "error" ? "error" : "ok"}`;
+  el.innerHTML = `
+    <div class="toast-title">${escapeHtml(title)}</div>
+    ${message ? `<div class="toast-msg">${escapeHtml(message)}</div>` : ``}
+  `;
+  host.appendChild(el);
+  window.setTimeout(() => {
+    el.style.opacity = "0";
+    el.style.transform = "translateY(6px)";
+    el.style.transition = "opacity .18s ease, transform .18s ease";
+    window.setTimeout(() => el.remove(), 220);
+  }, Math.max(800, ms));
+}
+
+function setGlobalLoading(isLoading, text = "Cargando...") {
+  const box = $id("globalLoading");
+  if (!box) return;
+  const label = box.querySelector(".global-loading-text");
+  if (label) label.textContent = text || "Cargando...";
+  if (isLoading) {
+    box.classList.remove("hidden");
+    box.setAttribute("aria-hidden", "false");
+  } else {
+    box.classList.add("hidden");
+    box.setAttribute("aria-hidden", "true");
+  }
+}
+
 function setLoginError(msg) {
-  const box = document.getElementById("loginError");
+  const box = $id("loginError");
   if (!box) return;
   if (!msg) { box.textContent = ""; hide(box); }
   else { box.textContent = msg; show(box); }
 }
 
 function setAppError(msg) {
-  const box = document.getElementById("appError");
+  const box = $id("appError");
   if (!box) return;
   if (!msg) { box.textContent = ""; hide(box); }
   else { box.textContent = msg; show(box); }
 }
 
 function setUsersError(msg) {
-  const box = document.getElementById("usersError");
+  const box = $id("usersError");
   if (!box) return;
   if (!msg) { box.textContent = ""; hide(box); }
   else { box.textContent = msg; show(box); }
 }
 
 function setUsersHint(msg) {
-  const box = document.getElementById("usersHint");
+  const box = $id("usersHint");
   if (!box) return;
   box.textContent = msg || "";
 }
 
 function setAppAuthedUI(isAuthed) {
-  const loginSection = document.getElementById("loginSection");
-  const appSection = document.getElementById("appSection");
-  const btnLogout = document.getElementById("btnLogout");
+  const loginSection = $id("loginSection");
+  const appSection = $id("appSection");
+  const btnLogout = $id("btnLogout");
 
   if (isAuthed) {
     hide(loginSection);
@@ -110,28 +159,7 @@ function pick(row, ...keys) {
     if (real) return row[real];
   }
 
-  const variants = [];
-  for (const k of keys) {
-    const s = String(k);
-    variants.push(s.toUpperCase());
-    variants.push(s.toLowerCase());
-    variants.push(s.replace(/_([a-z])/g, (_, c) => c.toUpperCase()));
-  }
-  for (const v of variants) {
-    const real = lowerMap.get(String(v).toLowerCase());
-    if (real) return row[real];
-  }
-
   return undefined;
-}
-
-function escapeHtml(s) {
-  return String(s)
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#039;");
 }
 
 function fmtDateLike(v) {
@@ -145,9 +173,6 @@ function fmtDateLike(v) {
   }
 }
 
-// ============================
-// Debounce (para búsqueda backend)
-// ============================
 function debounce(fn, ms = 250) {
   let t = null;
   return (...args) => {
@@ -155,6 +180,340 @@ function debounce(fn, ms = 250) {
     t = setTimeout(() => fn(...args), ms);
   };
 }
+
+// ============================
+// Clipboard
+// ============================
+function copyToClipboard(text) {
+  const s = String(text ?? "");
+  try {
+    navigator.clipboard?.writeText(s);
+    toast({ title: "Copiado", message: s, variant: "ok" });
+  } catch {
+    const ta = document.createElement("textarea");
+    ta.value = s;
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand("copy");
+    ta.remove();
+    toast({ title: "Copiado", message: s, variant: "ok" });
+  }
+}
+
+// ============================
+// Sorting
+// ============================
+function sortRows(rows, key, dir) {
+  const factor = dir === "desc" ? -1 : 1;
+
+  const getComparable = (r) => {
+    const v = pick(r, key);
+    if (v == null) return "";
+    if (typeof v === "number") return v;
+    const s = String(v);
+    const n = Number(s);
+    if (!Number.isNaN(n) && s.trim() !== "") return n;
+    const t = Date.parse(s);
+    if (!Number.isNaN(t) && /\d{4}-\d{2}-\d{2}/.test(s)) return t;
+    return s.toLowerCase();
+  };
+
+  return [...rows].sort((a, b) => {
+    const A = getComparable(a);
+    const B = getComparable(b);
+    if (A < B) return -1 * factor;
+    if (A > B) return 1 * factor;
+    return 0;
+  });
+}
+
+// ============================
+// Text measure (for auto-fit)
+// ============================
+let __measureCanvas = null;
+function measureTextPx(text, font) {
+  if (!__measureCanvas) __measureCanvas = document.createElement('canvas');
+  const ctx = __measureCanvas.getContext('2d');
+  ctx.font = font || '12px sans-serif';
+  return ctx.measureText(String(text || '')).width || 0;
+}
+
+// ============================
+// Column definitions
+// ============================
+const COL_DEFS = [
+  { key: "id_gestion", label: "ID", important: true },
+  { key: "departamento", label: "Departamento", important: true },
+  { key: "localidad", label: "Localidad", important: true },
+  { key: "estado", label: "Estado", important: true },
+  { key: "urgencia", label: "Urgencia", important: true },
+  { key: "ministerio_agencia_id", label: "Ministerio/Agencia", important: true },
+  { key: "categoria_general_id", label: "Categoria", important: true },
+  { key: "tipo_gestion", label: "Tipo" },
+  { key: "canal_origen", label: "Canal" },
+  { key: "detalle", label: "Detalle", important: true },
+  { key: "costo_estimado", label: "Costo" },
+  { key: "fecha_ingreso", label: "Ingreso" },
+  { key: "dias_transcurridos", label: "Dias" },
+];
+
+function defaultVisibleColsForWidth() {
+  const w = window.innerWidth || 1200;
+  if (w < 820) {
+    return new Set(COL_DEFS.filter(c => c.important).map(c => c.key));
+  }
+  if (w < 1024) {
+    return new Set(COL_DEFS.filter(c => c.important || ["fecha_ingreso"].includes(c.key)).map(c => c.key));
+  }
+  return new Set(COL_DEFS.map(c => c.key));
+}
+
+function loadVisibleCols() {
+  try {
+    const raw = localStorage.getItem(LS_COLS_KEY);
+    if (raw) {
+      const arr = JSON.parse(raw);
+      if (Array.isArray(arr) && arr.length) {
+        VISIBLE_COLS = new Set(arr.filter(Boolean));
+        return;
+      }
+    }
+  } catch {}
+  VISIBLE_COLS = defaultVisibleColsForWidth();
+}
+
+function saveVisibleCols() {
+  try {
+    localStorage.setItem(LS_COLS_KEY, JSON.stringify([...VISIBLE_COLS]));
+  } catch {}
+}
+
+function loadColWidths() {
+  try {
+    const raw = localStorage.getItem(LS_COL_WIDTH_KEY);
+    if (raw) {
+      const obj = JSON.parse(raw);
+      if (obj && typeof obj === 'object') {
+        COL_WIDTHS = obj;
+        return;
+      }
+    }
+  } catch {}
+  COL_WIDTHS = {};
+}
+
+function saveColWidths() {
+  try {
+    localStorage.setItem(LS_COL_WIDTH_KEY, JSON.stringify(COL_WIDTHS || {}));
+  } catch {}
+}
+
+function ensureMinimumCols() {
+  const min = 4;
+  if (VISIBLE_COLS.size < min) {
+    // Reponer importantes
+    COL_DEFS.filter(c => c.important).forEach(c => VISIBLE_COLS.add(c.key));
+  }
+}
+
+function buildColumnsUI() {
+  const list = $id("columnsList");
+  if (!list) return;
+
+  list.innerHTML = "";
+
+  COL_DEFS.forEach((c) => {
+    const wrap = document.createElement("label");
+    wrap.className = "col-opt";
+    wrap.innerHTML = `
+      <input type="checkbox" ${VISIBLE_COLS.has(c.key) ? "checked" : ""} data-col="${escapeHtml(c.key)}" />
+      <span>${escapeHtml(c.label)}</span>
+    `;
+    list.appendChild(wrap);
+  });
+
+  list.querySelectorAll("input[type='checkbox'][data-col]").forEach((cb) => {
+    cb.addEventListener("change", (e) => {
+      const key = e.target.getAttribute("data-col");
+      if (!key) return;
+      if (e.target.checked) VISIBLE_COLS.add(key);
+      else VISIBLE_COLS.delete(key);
+      ensureMinimumCols();
+      saveVisibleCols();
+      buildColumnsUI(); // por si se repuso el minimo
+      renderGrid(LAST_ROWS);
+    });
+  });
+}
+
+function setAllColsVisible() {
+  VISIBLE_COLS = new Set(COL_DEFS.map(c => c.key));
+  saveVisibleCols();
+  buildColumnsUI();
+  renderGrid(LAST_ROWS);
+}
+
+function setOnlyImportantCols() {
+  VISIBLE_COLS = new Set(COL_DEFS.filter(c => c.important).map(c => c.key));
+  saveVisibleCols();
+  buildColumnsUI();
+  renderGrid(LAST_ROWS);
+}
+
+function resetColsToDefault() {
+  localStorage.removeItem(LS_COLS_KEY);
+  loadVisibleCols();
+  saveVisibleCols();
+  buildColumnsUI();
+  renderGrid(LAST_ROWS);
+}
+
+// ============================
+// Popover helper
+// ============================
+function openPopover(btnId, panelId) {
+  const btn = $id(btnId);
+  const panel = $id(panelId);
+  if (!btn || !panel) return;
+  const isOpen = !panel.classList.contains("hidden");
+  if (isOpen) {
+    panel.classList.add("hidden");
+    btn.setAttribute("aria-expanded", "false");
+    return;
+  }
+  panel.classList.remove("hidden");
+  btn.setAttribute("aria-expanded", "true");
+}
+
+function closePopover(btnId, panelId) {
+  const btn = $id(btnId);
+  const panel = $id(panelId);
+  if (!btn || !panel) return;
+  panel.classList.add("hidden");
+  btn.setAttribute("aria-expanded", "false");
+}
+// ============================
+// Column resizing + auto-fit (client-only)
+// ============================
+let __resizing = null;
+
+function clamp(n, a, b){ return Math.max(a, Math.min(b, n)); }
+function toInt(v){
+  const n = Number(v);
+  return Number.isFinite(n) ? Math.trunc(n) : 0;
+}
+
+function applyColWidth(tableEl, colIndex, px) {
+  if (!tableEl) return;
+  const w = clamp(toInt(px), 80, 900);
+  const ths = tableEl.querySelectorAll('thead th');
+  if (ths[colIndex]) ths[colIndex].style.width = w + 'px';
+  tableEl.querySelectorAll('tbody tr').forEach(tr => {
+    const td = tr.children[colIndex];
+    if (td) td.style.width = w + 'px';
+  });
+}
+
+function persistWidthForKey(colKey, px){
+  if (!colKey) return;
+  COL_WIDTHS = COL_WIDTHS || {};
+  COL_WIDTHS[colKey] = clamp(toInt(px), 80, 900);
+  saveColWidths();
+}
+
+function getFontForMeasure(el){
+  const cs = window.getComputedStyle(el);
+  return cs.font || (cs.fontWeight + ' ' + cs.fontSize + ' ' + cs.fontFamily);
+}
+
+function autoFitColumn(tableEl, colIndex, colKey) {
+  const th = tableEl?.querySelectorAll('thead th')[colIndex];
+  if (!th) return;
+  const font = getFontForMeasure(th);
+
+  let max = 0;
+  const thLabel = th.innerText || th.textContent || '';
+  max = Math.max(max, measureTextPx(thLabel, font));
+
+  tableEl.querySelectorAll('tbody tr').forEach(tr => {
+    const td = tr.children[colIndex];
+    if (!td) return;
+    const t = (td.innerText || td.textContent || '').trim();
+    const longest = t.split(/\n/).reduce((a,b)=> (a.length>=b.length?a:b), '');
+    max = Math.max(max, measureTextPx(longest, font));
+  });
+
+  const target = clamp(Math.ceil(max + 34), 80, 600);
+  applyColWidth(tableEl, colIndex, target);
+  persistWidthForKey(colKey, target);
+}
+
+function enableColumnResizing(tableEl, visibleCols) {
+  if (!tableEl) return;
+  const ths = tableEl.querySelectorAll('thead th');
+  if (!ths.length) return;
+
+  // Apply persisted widths first
+  (visibleCols || []).forEach((c, idx) => {
+    const w = COL_WIDTHS?.[c.key];
+    if (w) applyColWidth(tableEl, idx, w);
+  });
+
+  (visibleCols || []).forEach((c, idx) => {
+    const th = ths[idx];
+    if (!th) return;
+
+    // Ensure inner wrapper
+    if (!th.querySelector('.th-inner')){
+      const label = th.textContent || '';
+      th.innerHTML = '<div class="th-inner"><span class="th-label"></span></div>';
+      th.querySelector('.th-label').textContent = label;
+    }
+
+    // Avoid duplicate
+    if (th.querySelector('.col-resizer')) return;
+
+    const res = document.createElement('span');
+    res.className = 'col-resizer';
+    res.title = 'Arrastrar para ajustar. Doble click para auto-ajustar.';
+
+    res.addEventListener('click', (e) => e.stopPropagation());
+
+    res.addEventListener('dblclick', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      autoFitColumn(tableEl, idx, c.key);
+    });
+
+    res.addEventListener('mousedown', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const startX = e.clientX;
+      const startW = th.getBoundingClientRect().width;
+      __resizing = { tableEl, idx, key: c.key, startX, startW };
+      document.documentElement.classList.add('resizing');
+    });
+
+    th.querySelector('.th-inner')?.appendChild(res);
+  });
+}
+
+document.addEventListener('mousemove', (e) => {
+  if (!__resizing) return;
+  const dx = e.clientX - __resizing.startX;
+  const next = __resizing.startW + dx;
+  applyColWidth(__resizing.tableEl, __resizing.idx, next);
+});
+
+document.addEventListener('mouseup', () => {
+  if (!__resizing) return;
+  const th = __resizing.tableEl?.querySelectorAll('thead th')[__resizing.idx];
+  const w = th ? Math.round(th.getBoundingClientRect().width) : null;
+  if (w) persistWidthForKey(__resizing.key, w);
+  __resizing = null;
+  document.documentElement.classList.remove('resizing');
+});
+
 
 // ============================
 // Google Sign-In init
@@ -172,7 +531,7 @@ function initGoogleButton() {
     cancel_on_tap_outside: true,
   });
 
-  const googleBtn = document.getElementById("googleBtn");
+  const googleBtn = $id("googleBtn");
   if (googleBtn) {
     googleBtn.innerHTML = "";
     google.accounts.id.renderButton(googleBtn, {
@@ -193,23 +552,33 @@ async function onGoogleSignIn(response) {
     saveToken(response.credential);
 
     setAppAuthedUI(true);
-    document.getElementById("userBox").innerText = "Validando usuario...";
+    $id("userBox").innerText = "Validando usuario...";
 
+    setGlobalLoading(true, "Validando usuario...");
     await validateAuthOrThrow();
 
-    document.getElementById("userBox").innerText += " · Cargando...";
+    $id("userBox").innerText += " · Cargando...";
+    setGlobalLoading(true, "Cargando datos...");
     await bootData();
+
+    setGlobalLoading(false);
+    toast({ title: "Sesion iniciada", message: "Autenticacion exitosa.", variant: "ok" });
   } catch (e) {
     console.error(e);
+    setGlobalLoading(false);
+
     if (e?.__auth_error) {
       saveToken(null);
       setAppAuthedUI(false);
-      document.getElementById("userBox").innerText = "";
+      $id("userBox").innerText = "";
       setLoginError(e.message || "No autorizado.");
+      toast({ title: "Acceso denegado", message: e.message || "No autorizado.", variant: "error" });
       return;
     }
+
     setAppAuthedUI(true);
-    setAppError("Autenticación OK, pero falló la carga de datos. Detalle: " + (e?.message || String(e)));
+    setAppError("Autenticacion OK, pero fallo la carga de datos. Detalle: " + (e?.message || String(e)));
+    toast({ title: "Error", message: "Fallo la carga inicial de datos.", variant: "error" });
   }
 }
 
@@ -217,7 +586,7 @@ function logout() {
   saveToken(null);
   CURRENT_USER = null;
   setAppAuthedUI(false);
-  document.getElementById("userBox").innerText = "";
+  $id("userBox").innerText = "";
   setLoginError("");
   setAppError("");
 
@@ -228,6 +597,8 @@ function logout() {
 
   try { window.google?.accounts?.id?.disableAutoSelect(); } catch {}
   initGoogleButton();
+
+  toast({ title: "Sesion cerrada", message: "Hasta luego.", variant: "ok" });
 }
 
 // ============================
@@ -271,33 +642,56 @@ function wireUI() {
   if (WIRED) return;
   WIRED = true;
 
-  document.getElementById("estadoFilter")?.addEventListener("change", () => loadGestiones(true));
-  document.getElementById("ministerioFilter")?.addEventListener("change", () => loadGestiones(true));
-  document.getElementById("categoriaFilter")?.addEventListener("change", () => loadGestiones(true));
+  // filtros
+  $id("estadoFilter")?.addEventListener("change", () => loadGestiones(true));
+  $id("ministerioFilter")?.addEventListener("change", () => loadGestiones(true));
+  $id("categoriaFilter")?.addEventListener("change", () => loadGestiones(true));
+  $id("tipoGestionFilter")?.addEventListener("change", () => loadGestiones(true));
+  $id("canalOrigenFilter")?.addEventListener("change", () => loadGestiones(true));
 
-  // ✅ NUEVOS
-  document.getElementById("tipoGestionFilter")?.addEventListener("change", () => loadGestiones(true));
-  document.getElementById("canalOrigenFilter")?.addEventListener("change", () => loadGestiones(true));
+  $id("departamentoFilter")?.addEventListener("change", onDepartamentoFilterChange);
+  $id("localidadFilter")?.addEventListener("change", () => loadGestiones(true));
 
-  document.getElementById("departamentoFilter")?.addEventListener("change", onDepartamentoFilterChange);
-  document.getElementById("localidadFilter")?.addEventListener("change", () => loadGestiones(true));
-
-  // búsqueda server-side
-  document.getElementById("searchInput")?.addEventListener("input", (e) => {
+  // busqueda
+  $id("searchInput")?.addEventListener("input", (e) => {
     LAST_SEARCH = e.target.value || "";
     debouncedSearchReload();
   });
 
-  document.getElementById("ng_departamento")?.addEventListener("change", onNewGestionDeptoChange);
+  // tabs
+  $id("tab-gestiones")?.addEventListener("click", () => setTab("gestiones"));
+  $id("tab-tablero")?.addEventListener("click", () => setTab("tablero"));
+  $id("tab-usuarios")?.addEventListener("click", () => setTab("usuarios"));
 
-  document.getElementById("tab-gestiones")?.addEventListener("click", () => setTab("gestiones"));
-  document.getElementById("tab-tablero")?.addEventListener("click", () => setTab("tablero"));
-  document.getElementById("tab-usuarios")?.addEventListener("click", () => setTab("usuarios"));
+  // paginador
+  $id("btnPrev")?.addEventListener("click", () => pagePrev());
+  $id("btnNext")?.addEventListener("click", () => pageNext());
 
-  document.getElementById("btnPrev")?.addEventListener("click", () => pagePrev());
-  document.getElementById("btnNext")?.addEventListener("click", () => pageNext());
+  // logout
+  $id("btnLogout")?.addEventListener("click", logout);
 
-  document.getElementById("btnLogout")?.addEventListener("click", logout);
+  // modal localidades
+  $id("ng_departamento")?.addEventListener("change", onNewGestionDeptoChange);
+
+  // columnas
+  $id("btnColumns")?.addEventListener("click", () => openPopover("btnColumns", "columnsPanel"));
+  $id("btnColumnsAll")?.addEventListener("click", setAllColsVisible);
+  $id("btnColumnsMinimal")?.addEventListener("click", setOnlyImportantCols);
+  $id("btnColumnsReset")?.addEventListener("click", resetColsToDefault);
+
+  // recargar tablero
+  $id("btnReloadDashboard")?.addEventListener("click", reloadDashboard);
+
+  // click afuera para cerrar popover
+  document.addEventListener("click", (e) => {
+    const panel = $id("columnsPanel");
+    const btn = $id("btnColumns");
+    if (!panel || !btn) return;
+    if (panel.classList.contains("hidden")) return;
+    const t = e.target;
+    if (panel.contains(t) || btn.contains(t)) return;
+    closePopover("btnColumns", "columnsPanel");
+  });
 
   document.addEventListener("keydown", (e) => {
     if (e.key === "Escape") {
@@ -305,6 +699,7 @@ function wireUI() {
       closeModal("modalChangeState");
       closeModal("modalEventos");
       closeDrawer();
+      closePopover("btnColumns", "columnsPanel");
     }
   });
 }
@@ -315,9 +710,9 @@ async function validateAuthOrThrow() {
     CURRENT_USER = me;
 
     const label = [me.nombre, me.email, me.rol].filter(Boolean).join(" · ");
-    document.getElementById("userBox").innerText = label || "Autenticado";
+    $id("userBox").innerText = label || "Autenticado";
 
-    const tabUsuarios = document.getElementById("tab-usuarios");
+    const tabUsuarios = $id("tab-usuarios");
     if (isAdmin()) show(tabUsuarios);
     else hide(tabUsuarios);
 
@@ -329,7 +724,7 @@ async function validateAuthOrThrow() {
       setTab("gestiones");
     }
   } catch (e) {
-    const authErr = new Error("No autorizado o error de autenticación. Detalle: " + (e?.message || String(e)));
+    const authErr = new Error("No autorizado o error de autenticacion. Detalle: " + (e?.message || String(e)));
     authErr.__auth_error = true;
     throw authErr;
   }
@@ -338,6 +733,10 @@ async function validateAuthOrThrow() {
 async function bootData() {
   wireUI();
   setAppError("");
+  loadVisibleCols();
+  loadColWidths();
+  ensureMinimumCols();
+  buildColumnsUI();
   await loadCatalogos();
   await loadGestiones(true);
 }
@@ -349,14 +748,14 @@ function setTab(tab) {
   CURRENT_TAB = tab;
   sessionStorage.setItem("activeTab", tab);
 
-  document.getElementById("tab-gestiones")?.classList.toggle("active", tab === "gestiones");
-  document.getElementById("tab-tablero")?.classList.toggle("active", tab === "tablero");
-  document.getElementById("tab-usuarios")?.classList.toggle("active", tab === "usuarios");
+  $id("tab-gestiones")?.classList.toggle("active", tab === "gestiones");
+  $id("tab-tablero")?.classList.toggle("active", tab === "tablero");
+  $id("tab-usuarios")?.classList.toggle("active", tab === "usuarios");
 
   const panes = {
-    gestiones: document.getElementById("view-gestiones"),
-    tablero: document.getElementById("view-tablero"),
-    usuarios: document.getElementById("view-usuarios"),
+    gestiones: $id("view-gestiones"),
+    tablero: $id("view-tablero"),
+    usuarios: $id("view-usuarios"),
   };
   Object.entries(panes).forEach(([k, el]) => el && el.classList.toggle("hidden", k !== tab));
 
@@ -370,43 +769,82 @@ function setTab(tab) {
       setAppError("No se pudo cargar Usuarios. " + (e?.message || String(e)));
     });
   }
+
+  if (tab === "tablero") {
+    // Intento suave: recarga solo el iframe (sin recargar toda la app)
+    // Esto ayuda cuando Looker embed tarda en cargar al primer ingreso.
+    setTimeout(() => reloadDashboard({ silent: true }), 250);
+  }
 }
 
 // ============================
 // Modales + Drawer
 // ============================
+let LAST_FOCUS = null;
+
+function focusFirstIn(container) {
+  if (!container) return;
+  const focusable = container.querySelector("button, [href], input, select, textarea, [tabindex]:not([tabindex='-1'])");
+  if (focusable) focusable.focus({ preventScroll: true });
+}
+
 function openModal(id) {
-  const el = document.getElementById(id);
+  const el = $id(id);
   if (!el) return;
+  LAST_FOCUS = document.activeElement;
   el.classList.remove("hidden");
   el.setAttribute("aria-hidden", "false");
   document.body.classList.add("modal-open");
+  focusFirstIn(el);
 }
+
 function closeModal(id) {
-  const el = document.getElementById(id);
+  const el = $id(id);
   if (!el) return;
   el.classList.add("hidden");
   el.setAttribute("aria-hidden", "true");
 
   const anyOpen = Array.from(document.querySelectorAll(".modal")).some(m => !m.classList.contains("hidden"));
   if (!anyOpen) document.body.classList.remove("modal-open");
+
+  try { LAST_FOCUS?.focus?.({ preventScroll: true }); } catch {}
 }
 
 function openDrawer() {
-  const el = document.getElementById("drawer");
+  const el = $id("drawer");
   if (!el) return;
+  LAST_FOCUS = document.activeElement;
   el.classList.remove("hidden");
   el.setAttribute("aria-hidden", "false");
+  focusFirstIn(el);
 }
+
 function closeDrawer() {
-  const el = document.getElementById("drawer");
+  const el = $id("drawer");
   if (!el) return;
   el.classList.add("hidden");
   el.setAttribute("aria-hidden", "true");
+  try { LAST_FOCUS?.focus?.({ preventScroll: true }); } catch {}
 }
 
 // ============================
-// Catálogos
+// Dashboard reload
+// ============================
+let DASHBOARD_BASE_SRC = null;
+function reloadDashboard({ silent = false } = {}) {
+  const frame = $id("dashboardFrame");
+  if (!frame) return;
+  if (!DASHBOARD_BASE_SRC) {
+    DASHBOARD_BASE_SRC = frame.getAttribute("src") || "";
+  }
+  const base = DASHBOARD_BASE_SRC;
+  const sep = base.includes("?") ? "&" : "?";
+  frame.setAttribute("src", base + sep + "cacheBust=" + Date.now());
+  if (!silent) toast({ title: "Tablero", message: "Recargando Looker...", variant: "ok" });
+}
+
+// ============================
+// Catalogos
 // ============================
 function defaultTiposGestion() {
   return [
@@ -421,7 +859,7 @@ function defaultTiposGestion() {
 function defaultCanalesOrigen() {
   return [
     { id: "AGENDA_REUNIONES", nombre: "Agenda de reuniones" },
-    { id: "TELEFONO_FUNCIONARIO", nombre: "Teléfono del funcionario" },
+    { id: "TELEFONO_FUNCIONARIO", nombre: "Telefono del funcionario" },
     { id: "ENCUENTRO_EVENTO", nombre: "Encuentro / acto / evento" },
     { id: "WHATSAPP", nombre: "WhatsApp" },
     { id: "MAIL", nombre: "Mail" },
@@ -444,32 +882,30 @@ async function loadCatalogos() {
   CATALOGOS.categorias = categorias || [];
   CATALOGOS.departamentos = departamentos || [];
 
-  // ✅ Nuevos (front-only)
   CATALOGOS.tiposGestion = defaultTiposGestion();
   CATALOGOS.canalesOrigen = defaultCanalesOrigen();
 
   fillSelectFromCatalog("estadoFilter", CATALOGOS.estados, { valueKey: "nombre", labelKey: "nombre", firstLabel: "(Todos)" });
   fillSelectFromCatalog("ministerioFilter", CATALOGOS.ministerios, { valueKey: "id", labelKey: "nombre", firstLabel: "(Todos)" });
   fillSelectFromCatalog("categoriaFilter", CATALOGOS.categorias, { valueKey: "id", labelKey: "nombre", firstLabel: "(Todos)" });
-  fillSelectFromList("departamentoFilter", CATALOGOS.departamentos, "(Todos)");
+  fillSelectFromList("departamentoFilter", CATALOGOS.departamentos, "(Todos)" );
 
-  // ✅ Nuevos filtros
+  // nuevos filtros
   fillSelectFromCatalog("tipoGestionFilter", CATALOGOS.tiposGestion, { valueKey: "id", labelKey: "nombre", firstLabel: "(Todos)" });
   fillSelectFromCatalog("canalOrigenFilter", CATALOGOS.canalesOrigen, { valueKey: "id", labelKey: "nombre", firstLabel: "(Todos)" });
 
-  // Modal new
+  // modal new
   fillSelectFromCatalog("ng_ministerio", CATALOGOS.ministerios, { valueKey: "id", labelKey: "nombre", firstLabel: "(Seleccionar)" });
   fillSelectFromCatalog("ng_categoria", CATALOGOS.categorias, { valueKey: "id", labelKey: "nombre", firstLabel: "(Seleccionar)" });
   fillSelectFromCatalog("ng_urgencia", CATALOGOS.urgencias, { valueKey: "nombre", labelKey: "nombre", firstLabel: "(Seleccionar)" });
-  fillSelectFromList("ng_departamento", CATALOGOS.departamentos, "(Seleccionar)");
+  fillSelectFromList("ng_departamento", CATALOGOS.departamentos, "(Seleccionar)" );
 
-  // ✅ Modal nuevos selects
   fillSelectFromCatalog("ng_tipo_gestion", CATALOGOS.tiposGestion, { valueKey: "id", labelKey: "nombre", firstLabel: "(Seleccionar)" });
   fillSelectFromCatalog("ng_canal_origen", CATALOGOS.canalesOrigen, { valueKey: "id", labelKey: "nombre", firstLabel: "(Seleccionar)" });
 
   fillSelectFromCatalog("cs_nuevo_estado", CATALOGOS.estados, { valueKey: "nombre", labelKey: "nombre", firstLabel: "(Seleccionar)" });
 
-  const locSel = document.getElementById("localidadFilter");
+  const locSel = $id("localidadFilter");
   if (locSel) {
     locSel.innerHTML = `<option value="">(Todas)</option>`;
     locSel.disabled = true;
@@ -477,7 +913,7 @@ async function loadCatalogos() {
 }
 
 function fillSelectFromCatalog(selectId, arr, { valueKey, labelKey, firstLabel }) {
-  const sel = document.getElementById(selectId);
+  const sel = $id(selectId);
   if (!sel) return;
 
   sel.innerHTML = "";
@@ -495,7 +931,7 @@ function fillSelectFromCatalog(selectId, arr, { valueKey, labelKey, firstLabel }
 }
 
 function fillSelectFromList(selectId, list, firstLabel) {
-  const sel = document.getElementById(selectId);
+  const sel = $id(selectId);
   if (!sel) return;
 
   sel.innerHTML = "";
@@ -513,7 +949,7 @@ function fillSelectFromList(selectId, list, firstLabel) {
 }
 
 // ============================
-// Localidades por depto
+// Localidades
 // ============================
 async function getLocalidadesByDepto(departamento) {
   if (!departamento) return [];
@@ -524,8 +960,8 @@ async function getLocalidadesByDepto(departamento) {
 }
 
 async function onNewGestionDeptoChange() {
-  const depto = document.getElementById("ng_departamento")?.value || "";
-  const selLoc = document.getElementById("ng_localidad");
+  const depto = $id("ng_departamento")?.value || "";
+  const selLoc = $id("ng_localidad");
   if (!selLoc) return;
 
   selLoc.innerHTML = `<option value="">(Seleccionar)</option>`;
@@ -541,8 +977,8 @@ async function onNewGestionDeptoChange() {
 }
 
 async function onDepartamentoFilterChange() {
-  const depto = document.getElementById("departamentoFilter")?.value || "";
-  const locSel = document.getElementById("localidadFilter");
+  const depto = $id("departamentoFilter")?.value || "";
+  const locSel = $id("localidadFilter");
   if (!locSel) return;
 
   locSel.innerHTML = `<option value="">(Todas)</option>`;
@@ -573,7 +1009,7 @@ function normalizeRows(resp) {
 }
 
 function updatePagerInfo(resp, rows) {
-  const pager = document.getElementById("pagerInfo");
+  const pager = $id("pagerInfo");
   if (!pager) return;
 
   const total = resp?.total ?? resp?.count ?? null;
@@ -592,8 +1028,8 @@ function updatePagerInfo(resp, rows) {
     pager.textContent = rows.length ? `Mostrando ${rows.length}` : "";
   }
 
-  const btnPrev = document.getElementById("btnPrev");
-  const btnNext = document.getElementById("btnNext");
+  const btnPrev = $id("btnPrev");
+  const btnNext = $id("btnNext");
   if (btnPrev) btnPrev.disabled = (offset <= 0);
   if (btnNext) btnNext.disabled = (total != null ? (offset + limit >= total) : (rows.length < limit));
 }
@@ -601,16 +1037,13 @@ function updatePagerInfo(resp, rows) {
 function currentFilters() {
   const q = String(LAST_SEARCH || "").trim();
   return {
-    estado: document.getElementById("estadoFilter")?.value || null,
-    ministerio: document.getElementById("ministerioFilter")?.value || null,
-    categoria: document.getElementById("categoriaFilter")?.value || null,
-    departamento: document.getElementById("departamentoFilter")?.value || null,
-    localidad: document.getElementById("localidadFilter")?.value || null,
-
-    // ✅ nuevos
-    tipo_gestion: document.getElementById("tipoGestionFilter")?.value || null,
-    canal_origen: document.getElementById("canalOrigenFilter")?.value || null,
-
+    estado: $id("estadoFilter")?.value || null,
+    ministerio: $id("ministerioFilter")?.value || null,
+    categoria: $id("categoriaFilter")?.value || null,
+    departamento: $id("departamentoFilter")?.value || null,
+    localidad: $id("localidadFilter")?.value || null,
+    tipo_gestion: $id("tipoGestionFilter")?.value || null,
+    canal_origen: $id("canalOrigenFilter")?.value || null,
     q: q || null,
   };
 }
@@ -634,18 +1067,23 @@ async function loadGestiones(resetOffset = false) {
   qs.set("limit", String(PAGE.limit));
   qs.set("offset", String(PAGE.offset));
 
-  const resp = await api(`/gestiones/?${qs.toString()}`);
-  const rows = normalizeRows(resp);
-
-  LAST_ROWS = rows;
-  updatePagerInfo(resp, rows);
-  renderGrid(rows);
+  setGlobalLoading(true, "Cargando gestiones...");
+  try {
+    const resp = await api(`/gestiones/?${qs.toString()}`);
+    const rows = normalizeRows(resp);
+    LAST_ROWS = rows;
+    updatePagerInfo(resp, rows);
+    renderGrid(rows);
+  } finally {
+    setGlobalLoading(false);
+  }
 }
 
 function pagePrev() {
   PAGE.offset = Math.max(0, PAGE.offset - PAGE.limit);
   loadGestiones(false);
 }
+
 function pageNext() {
   PAGE.offset = PAGE.offset + PAGE.limit;
   loadGestiones(false);
@@ -654,7 +1092,11 @@ function pageNext() {
 function renderGrid(rows) {
   if (!Array.isArray(rows)) rows = [];
 
-  const table = document.getElementById("grid");
+  if (SORT.key) {
+    rows = sortRows(rows, SORT.key, SORT.dir);
+  }
+
+  const table = $id("grid");
   if (!table) return;
   table.innerHTML = "";
 
@@ -663,47 +1105,61 @@ function renderGrid(rows) {
   const tipoMap = new Map((CATALOGOS.tiposGestion || []).map((t) => [t.id, t.nombre]));
   const canalMap = new Map((CATALOGOS.canalesOrigen || []).map((c) => [c.id, c.nombre]));
 
-  const cols = [
-    { key: "id_gestion", label: "ID" },
-    { key: "departamento", label: "Departamento" },
-    { key: "localidad", label: "Localidad" },
-    { key: "estado", label: "Estado" },
-    { key: "urgencia", label: "Urgencia" },
-    { key: "ministerio_agencia_id", label: "Ministerio/Agencia" },
-    { key: "categoria_general_id", label: "Categoría" },
+  const visibleCols = COL_DEFS.filter(c => VISIBLE_COLS.has(c.key));
 
-    // ✅ nuevos
-    { key: "tipo_gestion", label: "Tipo" },
-    { key: "canal_origen", label: "Canal" },
-
-    { key: "detalle", label: "Detalle" },
-    { key: "costo_estimado", label: "Costo" },
-    { key: "fecha_ingreso", label: "Ingreso" },
-    { key: "dias_transcurridos", label: "Días" },
-  ];
-
+  // header
   const thead = document.createElement("thead");
   const trh = document.createElement("tr");
-  cols.forEach((c) => {
+
+  visibleCols.forEach((c) => {
     const th = document.createElement("th");
-    th.textContent = c.label;
+    th.style.cursor = "pointer";
+    th.title = "Ordenar";
+
+    const isSorted = SORT.key === c.key;
+    th.textContent = isSorted ? `${c.label} ${SORT.dir === "asc" ? "▲" : "▼"}` : c.label;
+
+    th.addEventListener("click", () => {
+      if (SORT.key === c.key) {
+        SORT.dir = (SORT.dir === "asc") ? "desc" : "asc";
+      } else {
+        SORT.key = c.key;
+        SORT.dir = "asc";
+      }
+      renderGrid(LAST_ROWS);
+    });
+
     trh.appendChild(th);
   });
+
   const thA = document.createElement("th");
   thA.textContent = "Acciones";
   trh.appendChild(thA);
+
   thead.appendChild(trh);
   table.appendChild(thead);
+  // habilitar resize + auto-fit (solo desktop/tablet)
+  enableColumnResizing(table, visibleCols);
 
+  // body
   const tbody = document.createElement("tbody");
 
   rows.forEach((r) => {
     const tr = document.createElement("tr");
 
-    cols.forEach((c) => {
+    visibleCols.forEach((c) => {
       const td = document.createElement("td");
+      td.dataset.label = c.label;
 
-      if (c.key === "ministerio_agencia_id") {
+      if (c.key === "id_gestion") {
+        const id = pick(r, "id_gestion") ?? "";
+        td.innerHTML = `
+          <button class="chip" type="button" title="Copiar ID" onclick="copyToClipboard('${escapeHtml(id)}')">
+            <span class="chip-label">${escapeHtml(id)}</span>
+            <span class="chip-icon" aria-hidden="true">⧉</span>
+          </button>
+        `;
+      } else if (c.key === "ministerio_agencia_id") {
         const id = pick(r, "ministerio_agencia_id");
         td.textContent = id ? (minMap.get(id) || id) : "";
       } else if (c.key === "categoria_general_id") {
@@ -731,9 +1187,11 @@ function renderGrid(rows) {
 
     const tdA = document.createElement("td");
     tdA.className = "actions";
-    const canDelete = isAdmin() || isSupervisor();
+    tdA.dataset.label = "Acciones";
 
+    const canDelete = isAdmin() || isSupervisor();
     const id = pick(r, "id_gestion") ?? "";
+
     tdA.innerHTML = `
       <div class="actions-wrap">
         <button class="btn" type="button" onclick="openDetalle('${escapeHtml(id)}')">Ver</button>
@@ -742,8 +1200,8 @@ function renderGrid(rows) {
         ${canDelete ? `<button class="btn btn-danger" type="button" onclick="deleteGestion('${escapeHtml(id)}')">Eliminar</button>` : ``}
       </div>
     `;
-    tr.appendChild(tdA);
 
+    tr.appendChild(tdA);
     tbody.appendChild(tr);
   });
 
@@ -751,7 +1209,7 @@ function renderGrid(rows) {
 }
 
 // ============================
-// Drawer
+// Drawer detalle
 // ============================
 function kvRow(k, v) {
   return `
@@ -766,13 +1224,14 @@ async function openDetalle(id) {
   if (!id) return;
 
   try {
+    setGlobalLoading(true, "Cargando detalle...");
     const [g, ev] = await Promise.all([
       api(`/gestiones/${encodeURIComponent(id)}`),
       api(`/gestiones/${encodeURIComponent(id)}/eventos`).catch(() => []),
     ]);
 
-    document.getElementById("drawerTitle").textContent = `Gestión ${id}`;
-    document.getElementById("drawerSub").textContent =
+    $id("drawerTitle").textContent = `Gestion ${id}`;
+    $id("drawerSub").textContent =
       [pick(g, "departamento"), pick(g, "localidad"), pick(g, "estado")].filter(Boolean).join(" · ");
 
     const minMap = new Map((CATALOGOS.ministerios || []).map((m) => [m.id, m.nombre]));
@@ -797,8 +1256,8 @@ async function openDetalle(id) {
       ["Estado", pick(g, "estado")],
       ["Urgencia", pick(g, "urgencia")],
       ["Ministerio/Agencia", ministerioNombre],
-      ["Categoría", categoriaNombre],
-      ["Tipo de gestión", tipoNombre],
+      ["Categoria", categoriaNombre],
+      ["Tipo de gestion", tipoNombre],
       ["Canal origen", canalNombre],
       ["Detalle", pick(g, "detalle")],
       ["Subtipo detalle", pick(g, "subtipo_detalle")],
@@ -807,13 +1266,14 @@ async function openDetalle(id) {
       ["Organismo", pick(g, "organismo_id")],
       ["Departamento", pick(g, "departamento")],
       ["Localidad", pick(g, "localidad")],
-      ["Dirección", pick(g, "direccion")],
+      ["Direccion", pick(g, "direccion")],
       ["Ingreso", fmtDateLike(pick(g, "fecha_ingreso"))],
-      ["Última actualización", fmtDateLike(pick(g, "updated_at"))],
+      ["Ultima actualizacion", fmtDateLike(pick(g, "updated_at"))],
     ];
 
-    document.getElementById("drawerSummary").innerHTML =
-      summary.filter(([_, v]) => v !== null && v !== undefined && String(v).trim() !== "")
+    $id("drawerSummary").innerHTML =
+      summary
+        .filter(([_, v]) => v !== null && v !== undefined && String(v).trim() !== "")
         .map(([k, v]) => kvRow(k, String(v)))
         .join("");
 
@@ -849,7 +1309,7 @@ async function openDetalle(id) {
 
       const bodyLines = [];
       if (actor || rol) bodyLines.push(`Actor: ${actor}${rol ? " (" + rol + ")" : ""}`);
-      if (estA || estN) bodyLines.push(`Estado: ${estA || "—"} → ${estN || "—"}`);
+      if (estA || estN) bodyLines.push(`Estado: ${estA || "-"} -> ${estN || "-"}`);
       if (comentario) bodyLines.push(`Comentario: ${comentario}`);
       const body = bodyLines.join("\n") + (extra || "");
 
@@ -864,10 +1324,12 @@ async function openDetalle(id) {
       `;
     }).join("");
 
-    document.getElementById("drawerEventos").innerHTML = timeline || `<div class="hint">Sin movimientos.</div>`;
+    $id("drawerEventos").innerHTML = timeline || `<div class="hint">Sin movimientos.</div>`;
     openDrawer();
   } catch (e) {
     alert("No se pudo abrir el detalle.\n\nDetalle: " + (e?.message || String(e)));
+  } finally {
+    setGlobalLoading(false);
   }
 }
 
@@ -875,10 +1337,15 @@ async function openDetalle(id) {
 // Eventos (modal raw JSON)
 // ============================
 async function openEventos(id) {
-  const ev = await api(`/gestiones/${encodeURIComponent(id)}/eventos`);
-  document.getElementById("ev_title").textContent = `Eventos · ${id}`;
-  document.getElementById("ev_body").textContent = JSON.stringify(ev, null, 2);
-  openModal("modalEventos");
+  setGlobalLoading(true, "Cargando eventos...");
+  try {
+    const ev = await api(`/gestiones/${encodeURIComponent(id)}/eventos`);
+    $id("ev_title").textContent = `Eventos · ${id}`;
+    $id("ev_body").textContent = JSON.stringify(ev, null, 2);
+    openModal("modalEventos");
+  } finally {
+    setGlobalLoading(false);
+  }
 }
 
 // ============================
@@ -886,15 +1353,18 @@ async function openEventos(id) {
 // ============================
 async function deleteGestion(id) {
   if (!id) return;
-  const ok = confirm(`¿Seguro que querés eliminar (borrado lógico) la gestión?\n\nID: ${id}`);
+  const ok = confirm(`Seguro que queres eliminar (borrado logico) la gestion?\n\nID: ${id}`);
   if (!ok) return;
 
   try {
+    setGlobalLoading(true, "Eliminando...");
     await api(`/gestiones/${encodeURIComponent(id)}`, { method: "DELETE" });
-    alert("Gestión eliminada correctamente.");
+    toast({ title: "Gestion eliminada", message: `ID ${id}`, variant: "ok" });
     await loadGestiones(true);
   } catch (e) {
-    alert("No se pudo eliminar la gestión.\n\nDetalle: " + (e?.message || String(e)));
+    alert("No se pudo eliminar la gestion.\n\nDetalle: " + (e?.message || String(e)));
+  } finally {
+    setGlobalLoading(false);
   }
 }
 
@@ -902,12 +1372,12 @@ async function deleteGestion(id) {
 // Cambiar estado
 // ============================
 function openChangeState(id) {
-  document.getElementById("cs_id_gestion").value = id;
-  document.getElementById("cs_comentario").value = "";
-  document.getElementById("cs_nuevo_estado").value = "";
+  $id("cs_id_gestion").value = id;
+  $id("cs_comentario").value = "";
+  $id("cs_nuevo_estado").value = "";
 
-  const d = document.getElementById("cs_derivado_a");
-  const a = document.getElementById("cs_acciones_implementadas");
+  const d = $id("cs_derivado_a");
+  const a = $id("cs_acciones_implementadas");
   if (d) d.value = "";
   if (a) a.value = "";
 
@@ -915,44 +1385,49 @@ function openChangeState(id) {
 }
 
 async function submitChangeState() {
-  const id = document.getElementById("cs_id_gestion").value;
-  const nuevo = document.getElementById("cs_nuevo_estado").value;
-  const comentario = document.getElementById("cs_comentario").value || null;
-  const derivado_a = document.getElementById("cs_derivado_a")?.value || null;
-  const acciones_implementadas = document.getElementById("cs_acciones_implementadas")?.value || null;
+  const id = $id("cs_id_gestion").value;
+  const nuevo = $id("cs_nuevo_estado").value;
+  const comentario = $id("cs_comentario").value || null;
+  const derivado_a = $id("cs_derivado_a")?.value || null;
+  const acciones_implementadas = $id("cs_acciones_implementadas")?.value || null;
 
   if (!id) return alert("Falta id_gestion");
-  if (!nuevo) return alert("Seleccioná un estado");
+  if (!nuevo) return alert("Selecciona un estado");
 
   const nuevoUp = String(nuevo || "").toUpperCase();
   if ((nuevoUp === "ARCHIVADO" || nuevoUp === "NO REMITE SUAC") && (!comentario || String(comentario).trim() === "")) {
     return alert("Comentario es obligatorio para ARCHIVADO / NO REMITE SUAC");
   }
 
-  await api(`/gestiones/${encodeURIComponent(id)}/cambiar-estado`, {
-    method: "POST",
-    body: { nuevo_estado: nuevo, comentario, derivado_a, acciones_implementadas },
-  });
+  setGlobalLoading(true, "Guardando cambios...");
+  try {
+    await api(`/gestiones/${encodeURIComponent(id)}/cambiar-estado`, {
+      method: "POST",
+      body: { nuevo_estado: nuevo, comentario, derivado_a, acciones_implementadas },
+    });
 
-  closeModal("modalChangeState");
-  await loadGestiones(false);
+    closeModal("modalChangeState");
+    toast({ title: "Estado actualizado", message: `Gestion ${id}`, variant: "ok" });
+    await loadGestiones(false);
+  } finally {
+    setGlobalLoading(false);
+  }
 }
 
 // ============================
-// Nueva gestión
+// Nueva gestion
 // ============================
 function openNew() {
   setVal("ng_ministerio", "");
   setVal("ng_categoria", "");
   setVal("ng_urgencia", "Media");
 
-  // ✅ nuevos
   setVal("ng_tipo_gestion", "");
   setVal("ng_canal_origen", "");
 
   setVal("ng_departamento", "");
 
-  const loc = document.getElementById("ng_localidad");
+  const loc = $id("ng_localidad");
   if (loc) loc.innerHTML = `<option value="">(Seleccionar)</option>`;
 
   setVal("ng_direccion", "");
@@ -974,7 +1449,6 @@ async function submitNewGestion() {
     const categoria = getVal("ng_categoria");
     const urgencia = getVal("ng_urgencia") || "Media";
 
-    // ✅ nuevos
     const tipo_gestion = getVal("ng_tipo_gestion", "") || null;
     const canal_origen = getVal("ng_canal_origen", "") || null;
 
@@ -994,12 +1468,13 @@ async function submitNewGestion() {
     const costo_moneda = getVal("ng_costo_moneda") || "ARS";
     const nro_expediente = getVal("ng_nro_expediente", "") || null;
 
-    if (!ministerio) return alert("Seleccioná un ministerio/agencia");
-    if (!categoria) return alert("Seleccioná una categoría");
-    if (!departamento) return alert("Seleccioná un departamento");
-    if (!localidad) return alert("Seleccioná una localidad");
+    if (!ministerio) return alert("Selecciona un ministerio/agencia");
+    if (!categoria) return alert("Selecciona una categoria");
+    if (!departamento) return alert("Selecciona un departamento");
+    if (!localidad) return alert("Selecciona una localidad");
     if (!detalle || detalle.trim() === "") return alert("Detalle es obligatorio");
 
+    setGlobalLoading(true, "Validando datos...");
     await api(`/catalogos/geo?departamento=${encodeURIComponent(departamento)}&localidad=${encodeURIComponent(localidad)}`);
 
     const payload = {
@@ -1018,37 +1493,44 @@ async function submitNewGestion() {
       costo_moneda,
       nro_expediente,
 
-      // ✅ nuevos
       tipo_gestion,
       canal_origen,
     };
 
+    setGlobalLoading(true, "Creando gestion...");
     const resp = await api(`/gestiones`, { method: "POST", body: payload });
 
     closeModal("modalNewGestion");
     await loadGestiones(true);
 
-    if (resp?.id_gestion) alert(`Gestión creada: ${resp.id_gestion}`);
+    if (resp?.id_gestion) {
+      toast({ title: "Gestion creada", message: `ID ${resp.id_gestion}`, variant: "ok" });
+      alert(`Gestion creada: ${resp.id_gestion}`);
+    } else {
+      toast({ title: "Gestion creada", message: "Se creo correctamente.", variant: "ok" });
+    }
   } catch (e) {
     console.error(e);
-    alert("No se pudo crear la gestión.\n\nDetalle: " + (e?.message || String(e)));
+    alert("No se pudo crear la gestion.\n\nDetalle: " + (e?.message || String(e)));
+  } finally {
+    setGlobalLoading(false);
   }
 }
 
 // ============================
-// USUARIOS (Admin)
+// Usuarios (Admin)
 // ============================
 function normalizeEmail(s) { return String(s || "").trim().toLowerCase(); }
-function boolToYesNo(v) { return (v === true || String(v).toLowerCase() === "true") ? "Sí" : "No"; }
+function boolToYesNo(v) { return (v === true || String(v).toLowerCase() === "true") ? "Si" : "No"; }
 
 function clearUserForm() {
   setUsersError("");
   setUsersHint("");
 
-  const email = document.getElementById("u_email");
-  const nombre = document.getElementById("u_nombre");
-  const rol = document.getElementById("u_rol");
-  const activo = document.getElementById("u_activo");
+  const email = $id("u_email");
+  const nombre = $id("u_nombre");
+  const rol = $id("u_rol");
+  const activo = $id("u_activo");
 
   if (email) { email.value = ""; email.readOnly = false; }
   if (nombre) nombre.value = "";
@@ -1059,10 +1541,10 @@ function clearUserForm() {
 }
 
 function fillUserForm(u) {
-  const email = document.getElementById("u_email");
-  const nombre = document.getElementById("u_nombre");
-  const rol = document.getElementById("u_rol");
-  const activo = document.getElementById("u_activo");
+  const email = $id("u_email");
+  const nombre = $id("u_nombre");
+  const rol = $id("u_rol");
+  const activo = $id("u_activo");
 
   if (email) {
     email.value = pick(u, "email") || "";
@@ -1079,6 +1561,7 @@ async function loadUsers() {
   setUsersError("");
   setUsersHint("Cargando...");
 
+  setGlobalLoading(true, "Cargando usuarios...");
   try {
     const rows = await api(`/usuarios/`);
     LAST_USERS = Array.isArray(rows) ? rows : [];
@@ -1088,11 +1571,13 @@ async function loadUsers() {
     console.error(e);
     setUsersHint("");
     setUsersError("No se pudo cargar usuarios. " + (e?.message || String(e)));
+  } finally {
+    setGlobalLoading(false);
   }
 }
 
 function renderUsersGrid(rows) {
-  const table = document.getElementById("usersGrid");
+  const table = $id("usersGrid");
   if (!table) return;
   table.innerHTML = "";
 
@@ -1102,7 +1587,7 @@ function renderUsersGrid(rows) {
     { key: "rol", label: "Rol" },
     { key: "activo", label: "Activo" },
     { key: "updated_at", label: "Actualizado" },
-    { key: "updated_by", label: "Actualizó" },
+    { key: "updated_by", label: "Actualizo" },
   ];
 
   const thead = document.createElement("thead");
@@ -1125,11 +1610,10 @@ function renderUsersGrid(rows) {
 
     cols.forEach(c => {
       const td = document.createElement("td");
+      td.dataset.label = c.label;
       let v = pick(u, c.key);
-
       if (c.key === "activo") v = boolToYesNo(v);
       if (c.key === "updated_at") v = fmtDateLike(v);
-
       td.textContent = (v == null ? "" : String(v));
       tr.appendChild(td);
     });
@@ -1139,18 +1623,15 @@ function renderUsersGrid(rows) {
 
     const tdA = document.createElement("td");
     tdA.className = "actions";
+    tdA.dataset.label = "Acciones";
     tdA.innerHTML = `
       <div class="actions-wrap">
         <button class="btn" type="button" onclick="editUser('${escapeHtml(email)}')">Editar</button>
-        ${
-          activo
-            ? `<button class="btn btn-danger" type="button" onclick="disableUser('${escapeHtml(email)}')">Deshabilitar</button>`
-            : `<span class="hint">Deshabilitado</span>`
-        }
+        ${activo ? `<button class="btn btn-danger" type="button" onclick="disableUser('${escapeHtml(email)}')">Deshabilitar</button>` : `<span class="hint">Deshabilitado</span>`}
       </div>
     `;
-    tr.appendChild(tdA);
 
+    tr.appendChild(tdA);
     tbody.appendChild(tr);
   });
 
@@ -1164,11 +1645,11 @@ function findUserByEmail(email) {
 
 function editUser(email) {
   setUsersError("");
-  setUsersHint("Editando usuario…");
+  setUsersHint("Editando usuario...");
   const u = findUserByEmail(email);
   if (!u) {
     setUsersHint("");
-    return alert("No se encontró el usuario en la lista.");
+    return alert("No se encontro el usuario en la lista.");
   }
   fillUserForm(u);
   setUsersHint(`Editando: ${normalizeEmail(email)}`);
@@ -1180,10 +1661,10 @@ async function upsertUser() {
   setUsersError("");
   setUsersHint("");
 
-  const emailEl = document.getElementById("u_email");
-  const nombreEl = document.getElementById("u_nombre");
-  const rolEl = document.getElementById("u_rol");
-  const activoEl = document.getElementById("u_activo");
+  const emailEl = $id("u_email");
+  const nombreEl = $id("u_nombre");
+  const rolEl = $id("u_rol");
+  const activoEl = $id("u_activo");
 
   const email = normalizeEmail(emailEl?.value);
   const nombre = (nombreEl?.value || "").trim() || null;
@@ -1195,6 +1676,7 @@ async function upsertUser() {
 
   const isEditMode = !!emailEl?.readOnly || emailEl?.dataset.mode === "edit";
 
+  setGlobalLoading(true, "Guardando usuario...");
   try {
     if (isEditMode) {
       await api(`/usuarios/${encodeURIComponent(email)}`, {
@@ -1202,12 +1684,14 @@ async function upsertUser() {
         body: { nombre, rol, activo },
       });
       setUsersHint("Usuario actualizado.");
+      toast({ title: "Usuario actualizado", message: email, variant: "ok" });
     } else {
       await api(`/usuarios/`, {
         method: "POST",
         body: { email, nombre, rol, activo },
       });
       setUsersHint("Usuario creado.");
+      toast({ title: "Usuario creado", message: email, variant: "ok" });
     }
 
     await loadUsers();
@@ -1215,28 +1699,34 @@ async function upsertUser() {
   } catch (e) {
     console.error(e);
     if (e?.status === 409) {
-      setUsersError("El usuario ya existe. Usá Editar desde la lista o cambiá el email.");
+      setUsersError("El usuario ya existe. Usa Editar desde la lista o cambia el email.");
       return;
     }
     setUsersError("No se pudo guardar. " + (e?.message || String(e)));
+  } finally {
+    setGlobalLoading(false);
   }
 }
 
 async function disableUser(email) {
   if (!isAdmin()) return;
   const e = normalizeEmail(email);
-  const ok = confirm(`¿Deshabilitar usuario?\n\n${e}`);
+  const ok = confirm(`Deshabilitar usuario?\n\n${e}`);
   if (!ok) return;
 
+  setGlobalLoading(true, "Deshabilitando usuario...");
   try {
     await api(`/usuarios/${encodeURIComponent(e)}`, { method: "DELETE" });
     setUsersHint("Usuario deshabilitado.");
+    toast({ title: "Usuario deshabilitado", message: e, variant: "ok" });
     await loadUsers();
-    const currentFormEmail = normalizeEmail(document.getElementById("u_email")?.value);
+    const currentFormEmail = normalizeEmail($id("u_email")?.value);
     if (currentFormEmail === e) clearUserForm();
   } catch (err) {
     console.error(err);
     setUsersError("No se pudo deshabilitar. " + (err?.message || String(err)));
+  } finally {
+    setGlobalLoading(false);
   }
 }
 
@@ -1244,7 +1734,7 @@ async function disableUser(email) {
 // Init
 // ============================
 document.addEventListener("DOMContentLoaded", async () => {
-  document.getElementById("userBox").innerText = "";
+  $id("userBox").innerText = "";
   setAppAuthedUI(false);
   setLoginError("");
   setAppError("");
@@ -1254,7 +1744,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   wireUI();
   initGoogleButton();
 
-  const emailEl = document.getElementById("u_email");
+  const emailEl = $id("u_email");
   if (emailEl) emailEl.dataset.mode = "create";
 
   const t = readToken();
@@ -1262,12 +1752,16 @@ document.addEventListener("DOMContentLoaded", async () => {
     try {
       saveToken(t);
       setAppAuthedUI(true);
-      document.getElementById("userBox").innerText = "Restaurando sesión...";
+      $id("userBox").innerText = "Restaurando sesion...";
+      setGlobalLoading(true, "Restaurando sesion...");
       await validateAuthOrThrow();
       await bootData();
+      toast({ title: "Sesion restaurada", message: "Continuaste donde lo dejaste.", variant: "ok" });
     } catch (e) {
-      console.warn("No se pudo restaurar sesión:", e);
+      console.warn("No se pudo restaurar sesion:", e);
       logout();
+    } finally {
+      setGlobalLoading(false);
     }
   }
 });
@@ -1283,9 +1777,6 @@ window.openChangeState = openChangeState;
 window.submitChangeState = submitChangeState;
 window.openEventos = openEventos;
 window.deleteGestion = deleteGestion;
-
-window.setTab = setTab;
-
 window.openDetalle = openDetalle;
 window.closeDrawer = closeDrawer;
 
@@ -1295,3 +1786,7 @@ window.upsertUser = upsertUser;
 window.clearUserForm = clearUserForm;
 window.editUser = editUser;
 window.disableUser = disableUser;
+
+// Util
+window.copyToClipboard = copyToClipboard;
+window.reloadDashboard = reloadDashboard;
