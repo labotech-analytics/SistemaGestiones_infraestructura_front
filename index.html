@@ -1,13 +1,14 @@
 <!doctype html>
 <html lang="es">
+
 <head>
-  <meta charset="utf-8"/>
-  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
   <meta name="color-scheme" content="light dark">
   <meta name="theme-color" content="#0f172a">
   <title>Infra Gestión</title>
 
-  <link rel="stylesheet" href="./styles.css"/>
+  <link rel="stylesheet" href="./styles.css" />
 
   <!-- Google Identity Services -->
   <script src="https://accounts.google.com/gsi/client" async defer></script>
@@ -53,7 +54,8 @@
 
       <!-- NAV TABS -->
       <div class="tabs card" role="tablist" aria-label="Vistas">
-        <button class="tab active" id="tab-gestiones" type="button" data-view="gestiones" role="tab" aria-controls="view-gestiones">
+        <button class="tab active" id="tab-gestiones" type="button" data-view="gestiones" role="tab"
+          aria-controls="view-gestiones">
           <span class="tab-dot" aria-hidden="true"></span>
           Gestiones
         </button>
@@ -62,7 +64,8 @@
           Tablero
         </button>
 
-        <button class="tab hidden" id="tab-usuarios" type="button" data-view="usuarios" role="tab" aria-controls="view-usuarios">
+        <button class="tab hidden" id="tab-usuarios" type="button" data-view="usuarios" role="tab"
+          aria-controls="view-usuarios">
           Usuarios
           <span class="pill" id="pillAdmin" title="Solo Admin">Admin</span>
         </button>
@@ -77,7 +80,8 @@
 
             <!-- Selector de columnas -->
             <div class="popover">
-              <button id="btnColumns" class="btn" type="button" aria-haspopup="true" aria-expanded="false">Columnas</button>
+              <button id="btnColumns" class="btn" type="button" aria-haspopup="true"
+                aria-expanded="false">Columnas</button>
               <div id="columnsPanel" class="popover-panel hidden" role="menu" aria-label="Selector de columnas">
                 <div class="popover-head">
                   <div class="popover-title">Columnas visibles</div>
@@ -96,32 +100,44 @@
           <div class="toolbar-filters" aria-label="Filtros">
             <div class="field">
               <label for="estadoFilter">Estado</label>
-              <select id="estadoFilter"><option value="">(Todos)</option></select>
+              <select id="estadoFilter">
+                <option value="">(Todos)</option>
+              </select>
             </div>
 
             <div class="field">
               <label for="ministerioFilter">Ministerio</label>
-              <select id="ministerioFilter"><option value="">(Todos)</option></select>
+              <select id="ministerioFilter">
+                <option value="">(Todos)</option>
+              </select>
             </div>
 
             <div class="field">
               <label for="categoriaFilter">Categoría</label>
-              <select id="categoriaFilter"><option value="">(Todos)</option></select>
+              <select id="categoriaFilter">
+                <option value="">(Todos)</option>
+              </select>
             </div>
 
             <div class="field">
               <label for="tipoGestionFilter">Tipo</label>
-              <select id="tipoGestionFilter"><option value="">(Todos)</option></select>
+              <select id="tipoGestionFilter">
+                <option value="">(Todos)</option>
+              </select>
             </div>
 
             <div class="field">
               <label for="canalOrigenFilter">Canal origen</label>
-              <select id="canalOrigenFilter"><option value="">(Todos)</option></select>
+              <select id="canalOrigenFilter">
+                <option value="">(Todos)</option>
+              </select>
             </div>
 
             <div class="field">
               <label for="departamentoFilter">Departamento</label>
-              <select id="departamentoFilter"><option value="">(Todos)</option></select>
+              <select id="departamentoFilter">
+                <option value="">(Todos)</option>
+              </select>
             </div>
 
             <div class="field">
@@ -166,14 +182,12 @@
           </div>
 
           <div class="iframe-wrap">
-            <iframe
-              id="dashboardFrame"
+            <iframe id="dashboardFrame"
               data-src="https://lookerstudio.google.com/embed/reporting/f9dc4a4e-a174-45a8-938c-385f4121f689/page/fP1fF"
               src="https://lookerstudio.google.com/embed/reporting/f9dc4a4e-a174-45a8-938c-385f4121f689/page/fP1fF"
               allowfullscreen
               sandbox="allow-storage-access-by-user-activation allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox"
-              title="Tablero Looker Studio"
-            ></iframe>
+              title="Tablero Looker Studio"></iframe>
           </div>
         </div>
       </section>
@@ -270,7 +284,8 @@
         <div class="modal-card" role="document">
           <div class="modal-head">
             <h3 class="h3">Nueva gestión</h3>
-            <button class="btn ghost modal-x" type="button" onclick="closeModal('modalNewGestion')" aria-label="Cerrar">✕</button>
+            <button class="btn ghost modal-x" type="button" onclick="closeModal('modalNewGestion')"
+              aria-label="Cerrar">✕</button>
           </div>
 
           <div class="form-grid">
@@ -357,7 +372,8 @@
         <div class="modal-card" role="document">
           <div class="modal-head">
             <h3 class="h3">Modificar estado</h3>
-            <button class="btn ghost modal-x" type="button" onclick="closeModal('modalChangeState')" aria-label="Cerrar">✕</button>
+            <button class="btn ghost modal-x" type="button" onclick="closeModal('modalChangeState')"
+              aria-label="Cerrar">✕</button>
           </div>
 
           <input id="cs_id_gestion" type="hidden" />
@@ -369,6 +385,14 @@
 
             <label>Derivado a
               <input id="cs_derivado_a" type="text" placeholder="Área / persona / organismo" />
+            </label>
+
+            <label>Nro Expediente
+              <input id="cs_nro_expediente" type="text" placeholder="EXP-2026-..." />
+            </label>
+
+            <label>Fecha Ingreso
+              <input id="cs_fecha_ingreso" type="date" />
             </label>
 
             <label class="span-2">Acciones implementadas
@@ -392,7 +416,8 @@
         <div class="modal-card" role="document">
           <div class="modal-head">
             <h3 class="h3" id="ev_title">Eventos</h3>
-            <button class="btn ghost modal-x" type="button" onclick="closeModal('modalEventos')" aria-label="Cerrar">✕</button>
+            <button class="btn ghost modal-x" type="button" onclick="closeModal('modalEventos')"
+              aria-label="Cerrar">✕</button>
           </div>
           <pre id="ev_body" class="pre"></pre>
         </div>
@@ -411,4 +436,5 @@
 
   <script src="./app.js"></script>
 </body>
+
 </html>

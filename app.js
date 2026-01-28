@@ -1,4 +1,5 @@
 const API_BASE = "https://infraestructura-gestioninterna-354063050046.southamerica-east1.run.app";
+//const API_BASE = "http://localhost:8080";
 const GOOGLE_CLIENT_ID = "354063050046-fkp06ao8aauems1gcj4hlngljf56o3cj.apps.googleusercontent.com";
 
 let idToken = null;
@@ -278,14 +279,14 @@ function loadVisibleCols() {
         return;
       }
     }
-  } catch {}
+  } catch { }
   VISIBLE_COLS = defaultVisibleColsForWidth();
 }
 
 function saveVisibleCols() {
   try {
     localStorage.setItem(LS_COLS_KEY, JSON.stringify([...VISIBLE_COLS]));
-  } catch {}
+  } catch { }
 }
 
 function loadColWidths() {
@@ -298,14 +299,14 @@ function loadColWidths() {
         return;
       }
     }
-  } catch {}
+  } catch { }
   COL_WIDTHS = {};
 }
 
 function saveColWidths() {
   try {
     localStorage.setItem(LS_COL_WIDTH_KEY, JSON.stringify(COL_WIDTHS || {}));
-  } catch {}
+  } catch { }
 }
 
 function ensureMinimumCols() {
@@ -443,8 +444,8 @@ function closePopover(btnId, panelId) {
 // ============================
 let __resizing = null;
 
-function clamp(n, a, b){ return Math.max(a, Math.min(b, n)); }
-function toInt(v){
+function clamp(n, a, b) { return Math.max(a, Math.min(b, n)); }
+function toInt(v) {
   const n = Number(v);
   return Number.isFinite(n) ? Math.trunc(n) : 0;
 }
@@ -460,14 +461,14 @@ function applyColWidth(tableEl, colIndex, px) {
   });
 }
 
-function persistWidthForKey(colKey, px){
+function persistWidthForKey(colKey, px) {
   if (!colKey) return;
   COL_WIDTHS = COL_WIDTHS || {};
   COL_WIDTHS[colKey] = clamp(toInt(px), 80, 900);
   saveColWidths();
 }
 
-function getFontForMeasure(el){
+function getFontForMeasure(el) {
   const cs = window.getComputedStyle(el);
   return cs.font || (cs.fontWeight + ' ' + cs.fontSize + ' ' + cs.fontFamily);
 }
@@ -485,7 +486,7 @@ function autoFitColumn(tableEl, colIndex, colKey) {
     const td = tr.children[colIndex];
     if (!td) return;
     const t = (td.innerText || td.textContent || '').trim();
-    const longest = t.split(/\n/).reduce((a,b)=> (a.length>=b.length?a:b), '');
+    const longest = t.split(/\n/).reduce((a, b) => (a.length >= b.length ? a : b), '');
     max = Math.max(max, measureTextPx(longest, font));
   });
 
@@ -510,7 +511,7 @@ function enableColumnResizing(tableEl, visibleCols) {
     if (!th) return;
 
     // Ensure inner wrapper
-    if (!th.querySelector('.th-inner')){
+    if (!th.querySelector('.th-inner')) {
       const label = th.textContent || '';
       th.innerHTML = '<div class="th-inner"><span class="th-label"></span></div>';
       th.querySelector('.th-label').textContent = label;
@@ -641,7 +642,7 @@ function logout() {
   closeModal("modalEventos");
   closeDrawer();
 
-  try { window.google?.accounts?.id?.disableAutoSelect(); } catch {}
+  try { window.google?.accounts?.id?.disableAutoSelect(); } catch { }
   initGoogleButton();
 
   toast({ title: "Sesion cerrada", message: "Hasta luego.", variant: "ok" });
@@ -853,7 +854,7 @@ function closeModal(id) {
   const anyOpen = Array.from(document.querySelectorAll(".modal")).some(m => !m.classList.contains("hidden"));
   if (!anyOpen) document.body.classList.remove("modal-open");
 
-  try { LAST_FOCUS?.focus?.({ preventScroll: true }); } catch {}
+  try { LAST_FOCUS?.focus?.({ preventScroll: true }); } catch { }
 }
 
 function openDrawer() {
@@ -870,7 +871,7 @@ function closeDrawer() {
   if (!el) return;
   el.classList.add("hidden");
   el.setAttribute("aria-hidden", "true");
-  try { LAST_FOCUS?.focus?.({ preventScroll: true }); } catch {}
+  try { LAST_FOCUS?.focus?.({ preventScroll: true }); } catch { }
 }
 
 // ============================
@@ -934,7 +935,7 @@ async function loadCatalogos() {
   fillSelectFromCatalog("estadoFilter", CATALOGOS.estados, { valueKey: "nombre", labelKey: "nombre", firstLabel: "(Todos)" });
   fillSelectFromCatalog("ministerioFilter", CATALOGOS.ministerios, { valueKey: "id", labelKey: "nombre", firstLabel: "(Todos)" });
   fillSelectFromCatalog("categoriaFilter", CATALOGOS.categorias, { valueKey: "id", labelKey: "nombre", firstLabel: "(Todos)" });
-  fillSelectFromList("departamentoFilter", CATALOGOS.departamentos, "(Todos)" );
+  fillSelectFromList("departamentoFilter", CATALOGOS.departamentos, "(Todos)");
 
   // nuevos filtros
   fillSelectFromCatalog("tipoGestionFilter", CATALOGOS.tiposGestion, { valueKey: "id", labelKey: "nombre", firstLabel: "(Todos)" });
@@ -944,7 +945,7 @@ async function loadCatalogos() {
   fillSelectFromCatalog("ng_ministerio", CATALOGOS.ministerios, { valueKey: "id", labelKey: "nombre", firstLabel: "(Seleccionar)" });
   fillSelectFromCatalog("ng_categoria", CATALOGOS.categorias, { valueKey: "id", labelKey: "nombre", firstLabel: "(Seleccionar)" });
   fillSelectFromCatalog("ng_urgencia", CATALOGOS.urgencias, { valueKey: "nombre", labelKey: "nombre", firstLabel: "(Seleccionar)" });
-  fillSelectFromList("ng_departamento", CATALOGOS.departamentos, "(Seleccionar)" );
+  fillSelectFromList("ng_departamento", CATALOGOS.departamentos, "(Seleccionar)");
 
   fillSelectFromCatalog("ng_tipo_gestion", CATALOGOS.tiposGestion, { valueKey: "id", labelKey: "nombre", firstLabel: "(Seleccionar)" });
   fillSelectFromCatalog("ng_canal_origen", CATALOGOS.canalesOrigen, { valueKey: "id", labelKey: "nombre", firstLabel: "(Seleccionar)" });
@@ -1350,7 +1351,7 @@ async function openDetalle(id) {
           if (deriv) lines.push(`Derivado a: ${deriv}`);
           if (acc) lines.push(`Acciones: ${acc}`);
           if (lines.length) extra = "\n" + lines.join("\n");
-        } catch {}
+        } catch { }
       }
 
       const bodyLines = [];
@@ -1417,17 +1418,41 @@ async function deleteGestion(id) {
 // ============================
 // Cambiar estado
 // ============================
-function openChangeState(id) {
+async function openChangeState(id) {
+  if (!id) return;
+
   $id("cs_id_gestion").value = id;
   $id("cs_comentario").value = "";
   $id("cs_nuevo_estado").value = "";
 
   const d = $id("cs_derivado_a");
   const a = $id("cs_acciones_implementadas");
+  const exp = $id("cs_nro_expediente");
+  const fi = $id("cs_fecha_ingreso");
+
   if (d) d.value = "";
   if (a) a.value = "";
+  if (exp) exp.value = "";
+  if (fi) fi.value = "";
 
-  openModal("modalChangeState");
+  try {
+    setGlobalLoading(true, "Cargando datos actuales...");
+    const g = await api(`/gestiones/${encodeURIComponent(id)}`);
+    if (g) {
+      $id("cs_nuevo_estado").value = pick(g, "estado") || "";
+      if (d) d.value = pick(g, "derivado_a_id") || "";
+      if (exp) exp.value = pick(g, "nro_expediente") || "";
+      if (fi) {
+        const dateVal = pick(g, "fecha_ingreso");
+        if (dateVal) fi.value = dateVal.split('T')[0]; // Format YYYY-MM-DD
+      }
+    }
+    openModal("modalChangeState");
+  } catch (e) {
+    alert("No se pudo cargar la gestion para editar.\n\n" + (e?.message || String(e)));
+  } finally {
+    setGlobalLoading(false);
+  }
 }
 
 async function submitChangeState() {
@@ -1436,6 +1461,8 @@ async function submitChangeState() {
   const comentario = $id("cs_comentario").value || null;
   const derivado_a = $id("cs_derivado_a")?.value || null;
   const acciones_implementadas = $id("cs_acciones_implementadas")?.value || null;
+  const nro_expediente = $id("cs_nro_expediente")?.value || null;
+  const fecha_ingreso = $id("cs_fecha_ingreso")?.value || null;
 
   if (!id) return alert("Falta id_gestion");
   if (!nuevo) return alert("Selecciona un estado");
@@ -1449,11 +1476,18 @@ async function submitChangeState() {
   try {
     await api(`/gestiones/${encodeURIComponent(id)}/cambiar-estado`, {
       method: "POST",
-      body: { nuevo_estado: nuevo, comentario, derivado_a, acciones_implementadas },
+      body: {
+        nuevo_estado: nuevo,
+        comentario,
+        derivado_a,
+        acciones_implementadas,
+        nro_expediente,
+        fecha_ingreso
+      },
     });
 
     closeModal("modalChangeState");
-    toast({ title: "Estado actualizado", message: `Gestion ${id}`, variant: "ok" });
+    toast({ title: "Cambios guardados", message: `Gestion ${id}`, variant: "ok" });
     await loadGestiones(false);
   } finally {
     setGlobalLoading(false);
