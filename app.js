@@ -719,6 +719,7 @@ function wireUI() {
 
   // modal localidades
   $id("ng_departamento")?.addEventListener("change", onNewGestionDeptoChange);
+  $id("cs_departamento")?.addEventListener("change", onChangeStateDeptoChange);
 
   // columnas
   $id("btnColumns")?.addEventListener("click", () => openPopover("btnColumns", "columnsPanel"));
@@ -951,6 +952,12 @@ async function loadCatalogos() {
   fillSelectFromCatalog("ng_canal_origen", CATALOGOS.canalesOrigen, { valueKey: "id", labelKey: "nombre", firstLabel: "(Seleccionar)" });
 
   fillSelectFromCatalog("cs_nuevo_estado", CATALOGOS.estados, { valueKey: "nombre", labelKey: "nombre", firstLabel: "(Seleccionar)" });
+  fillSelectFromList("cs_departamento", CATALOGOS.departamentos, "(Seleccionar)");
+  const csLocSel = $id("cs_localidad");
+  if (csLocSel) {
+    csLocSel.innerHTML = `<option value="">(Seleccionar)</option>`;
+    csLocSel.disabled = true;
+  }
 
   const locSel = $id("localidadFilter");
   if (locSel) {
@@ -1012,6 +1019,24 @@ async function onNewGestionDeptoChange() {
   if (!selLoc) return;
 
   selLoc.innerHTML = `<option value="">(Seleccionar)</option>`;
+  if (!depto) return;
+
+  const locs = await getLocalidadesByDepto(depto);
+  locs.forEach((l) => {
+    const opt = document.createElement("option");
+    opt.value = l;
+    opt.textContent = l;
+    selLoc.appendChild(opt);
+  });
+}
+
+async function onChangeStateDeptoChange() {
+  const depto = $id("cs_departamento")?.value || "";
+  const selLoc = $id("cs_localidad");
+  if (!selLoc) return;
+
+  selLoc.innerHTML = `<option value="">(Seleccionar)</option>`;
+  selLoc.disabled = !depto;
   if (!depto) return;
 
   const locs = await getLocalidadesByDepto(depto);
@@ -1339,31 +1364,63 @@ async function openDetalle(id) {
       const estA = pick(e, "estado_anterior") || "";
       const estN = pick(e, "estado_nuevo") || "";
       const comentario = pick(e, "comentario") || "";
+      const campoModificado = pick(e, "campo_modificado") || "";
+      const valorAnterior = pick(e, "valor_anterior");
+      const valorNuevo = pick(e, "valor_nuevo");
 
-      let extra = "";
+      let tipoLabel = tipo;
+      const bodyLines = [];
+      if (actor || rol) bodyLines.push(`Actor: ${actor}${rol ? " (" + rol + ")" : ""}`);
+
       const meta = pick(e, "metadata_json");
+      let metaObj = null;
       if (meta) {
         try {
-          const obj = (typeof meta === "string") ? JSON.parse(meta) : meta;
-          const deriv = obj?.derivado_a || obj?.derivado_a_id;
-          const acc = obj?.acciones_implementadas;
-          const lines = [];
-          if (deriv) lines.push(`Derivado a: ${deriv}`);
-          if (acc) lines.push(`Acciones: ${acc}`);
-          if (lines.length) extra = "\n" + lines.join("\n");
+          metaObj = (typeof meta === "string") ? JSON.parse(meta) : meta;
         } catch { }
       }
 
-      const bodyLines = [];
-      if (actor || rol) bodyLines.push(`Actor: ${actor}${rol ? " (" + rol + ")" : ""}`);
-      if (estA || estN) bodyLines.push(`Estado: ${estA || "-"} -> ${estN || "-"}`);
+      if (tipo === "ACTUALIZA_DATO") {
+        tipoLabel = "Actualización de dato";
+        const labelMap = {
+          nro_expediente: "Nro expediente",
+          fecha_ingreso: "Fecha de carga",
+          departamento: "Departamento",
+          localidad: "Localidad",
+        };
+        const campoLabel = labelMap[campoModificado] || campoModificado || metaObj?.campo || "Dato";
+        bodyLines.push(`Campo: ${campoLabel}`);
+        bodyLines.push(`Valor anterior: ${valorAnterior ?? "-"}`);
+        bodyLines.push(`Valor nuevo: ${valorNuevo ?? "-"}`);
+        if (estN) bodyLines.push(`Estado actual: ${estN}`);
+      } else {
+        if (estA || estN) bodyLines.push(`Estado: ${estA || "-"} -> ${estN || "-"}`);
+
+        const extraLines = [];
+        const deriv = metaObj?.derivado_a || metaObj?.derivado_a_id;
+        const acc = metaObj?.acciones_implementadas;
+        const nroExp = Object.prototype.hasOwnProperty.call(metaObj || {}, "nro_expediente") ? metaObj?.nro_expediente : undefined;
+        const fechaIng = Object.prototype.hasOwnProperty.call(metaObj || {}, "fecha_ingreso") ? metaObj?.fecha_ingreso : undefined;
+        const deptoMeta = Object.prototype.hasOwnProperty.call(metaObj || {}, "departamento") ? metaObj?.departamento : undefined;
+        const locMeta = Object.prototype.hasOwnProperty.call(metaObj || {}, "localidad") ? metaObj?.localidad : undefined;
+
+        if (deriv) extraLines.push(`Derivado a: ${deriv}`);
+        if (acc) extraLines.push(`Acciones: ${acc}`);
+        if (nroExp !== undefined) extraLines.push(`Nro expediente: ${nroExp || "-"}`);
+        if (fechaIng !== undefined) extraLines.push(`Fecha de carga: ${fechaIng || "-"}`);
+        if (deptoMeta !== undefined) extraLines.push(`Departamento: ${deptoMeta || "-"}`);
+        if (locMeta !== undefined) extraLines.push(`Localidad: ${locMeta || "-"}`);
+
+        bodyLines.push(...extraLines);
+      }
+
       if (comentario) bodyLines.push(`Comentario: ${comentario}`);
-      const body = bodyLines.join("\n") + (extra || "");
+      const body = bodyLines.join("\n");
 
       return `
         <div class="tl-item">
           <div class="tl-head">
-            <div class="tl-type">${escapeHtml(tipo)}</div>
+            <div class="tl-type">${escapeHtml(tipoLabel)}</div>
             <div class="tl-date">${escapeHtml(when)}</div>
           </div>
           <div class="tl-body">${escapeHtml(body)}</div>
@@ -1429,11 +1486,18 @@ async function openChangeState(id) {
   const a = $id("cs_acciones_implementadas");
   const exp = $id("cs_nro_expediente");
   const fi = $id("cs_fecha_ingreso");
+  const deptSel = $id("cs_departamento");
+  const locSel = $id("cs_localidad");
 
   if (d) d.value = "";
   if (a) a.value = "";
   if (exp) exp.value = "";
   if (fi) fi.value = "";
+  if (deptSel) deptSel.value = "";
+  if (locSel) {
+    locSel.innerHTML = `<option value="">(Seleccionar)</option>`;
+    locSel.disabled = true;
+  }
 
   try {
     setGlobalLoading(true, "Cargando datos actuales...");
@@ -1444,7 +1508,26 @@ async function openChangeState(id) {
       if (exp) exp.value = pick(g, "nro_expediente") || "";
       if (fi) {
         const dateVal = pick(g, "fecha_ingreso");
-        if (dateVal) fi.value = dateVal.split('T')[0]; // Format YYYY-MM-DD
+        if (dateVal) fi.value = String(dateVal).split('T')[0];
+      }
+
+      const depto = pick(g, "departamento") || "";
+      const loc = pick(g, "localidad") || "";
+      if (deptSel) deptSel.value = depto;
+
+      if (locSel) {
+        locSel.innerHTML = `<option value="">(Seleccionar)</option>`;
+        locSel.disabled = !depto;
+        if (depto) {
+          const locs = await getLocalidadesByDepto(depto);
+          locs.forEach((l) => {
+            const opt = document.createElement("option");
+            opt.value = l;
+            opt.textContent = l;
+            locSel.appendChild(opt);
+          });
+          locSel.value = loc;
+        }
       }
     }
     openModal("modalChangeState");
@@ -1461,11 +1544,15 @@ async function submitChangeState() {
   const comentario = $id("cs_comentario").value || null;
   const derivado_a = $id("cs_derivado_a")?.value || null;
   const acciones_implementadas = $id("cs_acciones_implementadas")?.value || null;
-  const nro_expediente = $id("cs_nro_expediente")?.value || null;
+  const nro_expediente = $id("cs_nro_expediente")?.value ?? null;
   const fecha_ingreso = $id("cs_fecha_ingreso")?.value || null;
+  const departamento = $id("cs_departamento")?.value || null;
+  const localidad = $id("cs_localidad")?.value || null;
 
   if (!id) return alert("Falta id_gestion");
   if (!nuevo) return alert("Selecciona un estado");
+  if (!departamento) return alert("Selecciona un departamento");
+  if (!localidad) return alert("Selecciona una localidad");
 
   const nuevoUp = String(nuevo || "").toUpperCase();
   if ((nuevoUp === "ARCHIVADO" || nuevoUp === "NO REMITE SUAC") && (!comentario || String(comentario).trim() === "")) {
@@ -1482,7 +1569,9 @@ async function submitChangeState() {
         derivado_a,
         acciones_implementadas,
         nro_expediente,
-        fecha_ingreso
+        fecha_ingreso,
+        departamento,
+        localidad
       },
     });
 
