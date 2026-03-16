@@ -715,6 +715,7 @@ function wireUI() {
   $id("tab-gestiones")?.addEventListener("click", () => setTab("gestiones"));
   $id("tab-tablero")?.addEventListener("click", () => setTab("tablero"));
   $id("tab-resumen-territorial")?.addEventListener("click", () => setTab("resumen-territorial"));
+  $id("tab-resumen")?.addEventListener("click", () => setTab("resumen-territorial"));
   $id("tab-usuarios")?.addEventListener("click", () => setTab("usuarios"));
 
   // paginador
@@ -739,7 +740,9 @@ function wireUI() {
   $id("rt_departamento")?.addEventListener("change", onResumenTerritorialDeptoChange);
   $id("rt_localidad")?.addEventListener("change", onResumenTerritorialLocalidadChange);
   $id("btnResumenVer")?.addEventListener("click", loadResumenTerritorial);
+  $id("btnLoadResumen")?.addEventListener("click", loadResumenTerritorial);
   $id("btnResumenLimpiar")?.addEventListener("click", clearResumenTerritorial);
+  $id("btnClearResumen")?.addEventListener("click", clearResumenTerritorial);
   $id("btnResumenExport")?.addEventListener("click", exportResumenTerritorialPdf);
 
   // click afuera para cerrar popover
@@ -811,12 +814,13 @@ function setTab(tab) {
   $id("tab-gestiones")?.classList.toggle("active", tab === "gestiones");
   $id("tab-tablero")?.classList.toggle("active", tab === "tablero");
   $id("tab-resumen-territorial")?.classList.toggle("active", tab === "resumen-territorial");
+  $id("tab-resumen")?.classList.toggle("active", tab === "resumen-territorial");
   $id("tab-usuarios")?.classList.toggle("active", tab === "usuarios");
 
   const panes = {
     gestiones: $id("view-gestiones"),
     tablero: $id("view-tablero"),
-    "resumen-territorial": $id("view-resumen-territorial"),
+    "resumen-territorial": $id("view-resumen-territorial") || $id("view-resumen"),
     usuarios: $id("view-usuarios"),
   };
   Object.entries(panes).forEach(([k, el]) => el && el.classList.toggle("hidden", k !== tab));
@@ -1108,7 +1112,7 @@ function resumenFieldRow(label, value) {
 }
 
 function renderResumenTerritorialEmpty(message = "Selecciona una localidad para ver el resumen.") {
-  const host = $id("resumenTerritorialContent");
+  const host = $id("resumenTerritorialContent") || $id("summaryContent");
   if (!host) return;
   host.innerHTML = `
     <div class="card resumen-empty">
@@ -1271,7 +1275,7 @@ function renderResumenGestion(item) {
 }
 
 function renderResumenTerritorial() {
-  const host = $id("resumenTerritorialContent");
+  const host = $id("resumenTerritorialContent") || $id("summaryContent");
   const data = RESUMEN_TERRITORIAL.data;
   if (!host) return;
   if (!data) {
