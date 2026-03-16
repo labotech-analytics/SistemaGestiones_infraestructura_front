@@ -1,0 +1,359 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <meta name="color-scheme" content="light dark">
+  <meta name="theme-color" content="#0f172a">
+  <title>Infra Gestión</title>
+
+  <link rel="stylesheet" href="./styles.css"/>
+
+  <!-- Google Identity Services -->
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
+</head>
+
+<body>
+  <a class="skip-link" href="#main">Saltar al contenido</a>
+
+  <header class="topbar" role="banner">
+    <div class="brand">
+      <div class="brand-mark" aria-hidden="true">IG</div>
+      <div class="brand-text">
+        <div class="brand-title">Infra Gestión</div>
+        <div class="brand-subtitle">Sistema de gestiones</div>
+      </div>
+    </div>
+
+    <div class="topbar-right">
+      <div id="userBox" class="userbox" aria-live="polite"></div>
+      <button id="btnLogout" class="btn ghost hidden" type="button">Salir</button>
+    </div>
+  </header>
+
+  <main id="main" class="container" role="main">
+
+    <!-- LOGIN -->
+    <section id="loginSection" class="card card-lg" aria-label="Ingreso">
+      <div class="card-head">
+        <h2 class="h2">Ingresar</h2>
+        <p class="hint">Acceso solo por lista blanca.</p>
+      </div>
+
+      <div class="login-body">
+        <div id="googleBtn" class="google-btn"></div>
+        <p id="loginStatus" class="hint hidden"></p>
+        <p id="loginError" class="error hidden" role="alert"></p>
+      </div>
+    </section>
+
+    <!-- APP -->
+    <section id="appSection" class="hidden" aria-label="Aplicación">
+      <p id="appError" class="error hidden" role="alert"></p>
+
+      <!-- NAV TABS -->
+      <div class="tabs card" role="tablist" aria-label="Vistas">
+        <button class="tab active" id="tab-gestiones" type="button" data-view="gestiones" role="tab" aria-controls="view-gestiones">
+          <span class="tab-dot" aria-hidden="true"></span>
+          Gestiones
+        </button>
+
+        <button class="tab" id="tab-tablero" type="button" data-view="tablero" role="tab" aria-controls="view-tablero">
+          Tablero
+        </button>
+
+        <button class="tab" id="tab-resumen" type="button" data-view="resumen" role="tab" aria-controls="view-resumen">
+          Resumen territorial
+        </button>
+
+        <button class="tab hidden" id="tab-usuarios" type="button" data-view="usuarios" role="tab" aria-controls="view-usuarios">
+          Usuarios
+          <span class="pill" id="pillAdmin" title="Solo Admin">Admin</span>
+        </button>
+      </div>
+
+      <!-- VIEW: GESTIONES -->
+      <section id="view-gestiones" class="view" role="tabpanel" aria-labelledby="tab-gestiones">
+        <div class="toolbar card">
+          <div class="toolbar-left">
+            <button class="btn" type="button" onclick="loadGestiones(true)">Refrescar</button>
+            <button class="btn primary" type="button" onclick="openNew()">Nueva gestión</button>
+
+            <!-- Selector de columnas -->
+            <div class="popover">
+              <button id="btnColumns" class="btn" type="button" aria-haspopup="true" aria-expanded="false">Columnas</button>
+              <div id="columnsPanel" class="popover-panel hidden" role="menu" aria-label="Selector de columnas">
+                <div class="popover-head">
+                  <div class="popover-title">Columnas visibles</div>
+                  <div class="popover-actions">
+                    <button id="btnColumnsMinimal" class="btn" type="button">Min</button>
+                    <button id="btnColumnsAll" class="btn" type="button">Todo</button>
+                    <button id="btnColumnsReset" class="btn" type="button">Reset</button>
+                  </div>
+                </div>
+                <div id="columnsList" class="columns-list"></div>
+                <div class="hint">Se guarda por usuario (localStorage).</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="toolbar-filters" aria-label="Filtros">
+            <div class="field">
+              <label for="estadoFilter">Estado</label>
+              <select id="estadoFilter"><option value="">(Todos)</option></select>
+            </div>
+
+            <div class="field">
+              <label for="ministerioFilter">Ministerio</label>
+              <select id="ministerioFilter"><option value="">(Todos)</option></select>
+            </div>
+
+            <div class="field">
+              <label for="categoriaFilter">Categoría</label>
+              <select id="categoriaFilter"><option value="">(Todos)</option></select>
+            </div>
+
+            <div class="field">
+              <label for="tipoGestionFilter">Tipo</label>
+              <select id="tipoGestionFilter"><option value="">(Todos)</option></select>
+            </div>
+
+            <div class="field">
+              <label for="canalOrigenFilter">Canal origen</label>
+              <select id="canalOrigenFilter"><option value="">(Todos)</option></select>
+            </div>
+
+            <div class="field">
+              <label for="departamentoFilter">Departamento</label>
+              <select id="departamentoFilter"><option value="">(Todos)</option></select>
+            </div>
+
+            <div class="field">
+              <label for="localidadFilter">Localidad</label>
+              <select id="localidadFilter" disabled>
+                <option value="">(Todas)</option>
+              </select>
+            </div>
+
+            <div class="field field-search">
+              <label for="searchInput">Buscar</label>
+              <input id="searchInput" type="search" placeholder="Buscar en toda la tabla..." />
+            </div>
+          </div>
+        </div>
+
+        <div class="subbar">
+          <div id="pagerInfo" class="hint" aria-live="polite"></div>
+
+          <div class="pager">
+            <button class="btn" id="btnPrev" type="button">Anterior</button>
+            <button class="btn" id="btnNext" type="button">Siguiente</button>
+          </div>
+
+          <div class="hint" id="hintTable">Tip: en pantallas chicas podés ocultar columnas desde “Columnas”.</div>
+        </div>
+
+        <div class="table-wrap" aria-label="Tabla de gestiones">
+          <table class="grid" id="grid"></table>
+        </div>
+      </section>
+
+      <!-- VIEW: RESUMEN TERRITORIAL -->
+      <section id="view-resumen" class="view hidden">
+        <div class="card summary-shell">
+          <div class="card-head row">
+            <div>
+              <h3 class="h3">Resumen territorial</h3>
+              <p class="hint">Vista rápida por departamento y localidad con ficha editable y movimientos de cada gestión.</p>
+            </div>
+          </div>
+
+          <div class="card card-soft summary-filters">
+            <div class="toolbar-filters summary-toolbar">
+              <div class="field">
+                <label for="rt_departamento">Departamento</label>
+                <select id="rt_departamento"><option value="">(Seleccionar)</option></select>
+              </div>
+              <div class="field">
+                <label for="rt_localidad">Localidad</label>
+                <select id="rt_localidad" disabled><option value="">(Seleccionar)</option></select>
+              </div>
+              <div class="field field-actions-inline">
+                <label>&nbsp;</label>
+                <div class="actions-wrap">
+                  <button class="btn primary" id="btnLoadResumen" type="button">Ver resumen</button>
+                  <button class="btn" id="btnClearResumen" type="button">Limpiar</button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="summary-meta-grid">
+            <section class="card locality-card">
+              <div class="row between locality-card-head">
+                <div>
+                  <h4 class="h4">Ficha de localidad</h4>
+                  <p class="hint" id="rt_scopeLabel">Seleccioná un departamento y una localidad.</p>
+                </div>
+                <div class="actions-wrap">
+                  <button class="btn" id="btnEditLocalityInfo" type="button">Editar</button>
+                  <button class="btn primary hidden" id="btnSaveLocalityInfo" type="button">Guardar</button>
+                  <button class="btn hidden" id="btnCancelLocalityInfo" type="button">Cancelar</button>
+                </div>
+              </div>
+              <div id="rtLocalityInfoView" class="locality-info-view">
+                <div class="locality-hero">
+                  <div class="locality-hero-title" id="rt_localidad_nombre">Sin localidad seleccionada</div>
+                  <div class="locality-hero-sub" id="rt_localidad_scope"></div>
+                </div>
+                <div class="locality-stats-grid">
+                  <div class="stat-card"><span class="stat-label">Habitantes</span><strong id="rt_habitantes_view">-</strong></div>
+                  <div class="stat-card"><span class="stat-label">Electores</span><strong id="rt_electores_view">-</strong></div>
+                  <div class="stat-card stat-card-wide"><span class="stat-label">Intendente / Jefe comunal</span><strong id="rt_intendente_view">-</strong></div>
+                  <div class="stat-card stat-card-wide"><span class="stat-label">Partido político</span><strong id="rt_partido_view">-</strong></div>
+                </div>
+              </div>
+              <div id="rtLocalityInfoEdit" class="locality-info-edit hidden">
+                <div class="form-grid">
+                  <label class="span-2">Localidad
+                    <input id="rt_localidad_nombre_input" type="text" placeholder="Nombre de localidad" />
+                  </label>
+                  <label>Habitantes
+                    <input id="rt_habitantes_input" type="number" min="0" step="1" placeholder="0" />
+                  </label>
+                  <label>Electores
+                    <input id="rt_electores_input" type="number" min="0" step="1" placeholder="0" />
+                  </label>
+                  <label class="span-2">Intendente / Jefe comunal
+                    <input id="rt_intendente_input" type="text" placeholder="Nombre" />
+                  </label>
+                  <label class="span-2">Partido político
+                    <input id="rt_partido_input" type="text" placeholder="Partido / espacio" />
+                  </label>
+                </div>
+              </div>
+            </section>
+
+            <aside class="card summary-stats-card">
+              <h4 class="h4">Indicadores rápidos</h4>
+              <div class="summary-kpis">
+                <div class="kpi-card">
+                  <span class="kpi-label">Gestiones</span>
+                  <strong id="rt_total_gestiones">0</strong>
+                </div>
+                <div class="kpi-card">
+                  <span class="kpi-label">Abiertas</span>
+                  <strong id="rt_total_abiertas">0</strong>
+                </div>
+                <div class="kpi-card">
+                  <span class="kpi-label">Finalizadas</span>
+                  <strong id="rt_total_finalizadas">0</strong>
+                </div>
+                <div class="kpi-card">
+                  <span class="kpi-label">Urgentes</span>
+                  <strong id="rt_total_urgentes">0</strong>
+                </div>
+              </div>
+            </aside>
+          </div>
+
+          <section class="card summary-results-card">
+            <div class="row between summary-results-head">
+              <div>
+                <h4 class="h4">Gestiones y movimientos</h4>
+                <p class="hint" id="rtSummaryHint">Aún no se cargó información.</p>
+              </div>
+            </div>
+            <div id="rtGestionesList" class="territorial-list empty-state">
+              <div class="empty-illustration">📍</div>
+              <div class="empty-title">Elegí un territorio para ver el resumen</div>
+              <div class="empty-copy">Vas a poder consultar rápidamente todas las gestiones y sus movimientos.</div>
+            </div>
+          </section>
+        </div>
+      </section>
+
+      <!-- VIEW: TABLERO -->
+      <section id="view-tablero" class="view hidden" role="tabpanel" aria-labelledby="tab-tablero">
+        <div class="card dashboard-card dashboard-card--fullheight">
+          <div class="card-head row">
+            <div>
+              <h3 class="h3">Tablero</h3>
+              <p class="hint">Vista embebida de Looker Studio.</p>
+            </div>
+            <div class="actions-wrap">
+              <button class="btn" id="btnReloadDashboard" type="button">Recargar tablero</button>
+            </div>
+          </div>
+
+          <div class="iframe-wrap iframe-wrap--fill">
+            <iframe
+              id="dashboardFrame"
+              src="https://lookerstudio.google.com/embed/reporting/f9dc4a4e-a174-45a8-938c-385f4121f689/page/fP1fF"
+              allowfullscreen
+              sandbox="allow-storage-access-by-user-activation allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox"
+              title="Tablero Looker Studio"
+            ></iframe>
+          </div>
+        </div>
+      </section>
+
+      <!-- VIEW: USUARIOS -->
+      <section id="view-usuarios" class="view hidden" role="tabpanel" aria-labelledby="tab-usuarios">
+        <div class="card users-view-card users-view-card--fullheight">
+          <div class="card-head row">
+            <h3 class="h3">Usuarios</h3>
+            <p class="hint">Alta / edición de roles y activación.</p>
+          </div>
+
+          <div class="users-layout users-layout--fullheight">
+            <div class="users-form">
+              <h4 class="h4">Crear / actualizar</h4>
+              <div class="form-grid form-grid-1">
+                <label>Email *
+                  <input id="u_email" type="email" placeholder="usuario@dominio.com" autocomplete="off" />
+                </label>
+                <label>Nombre
+                  <input id="u_nombre" type="text" placeholder="Nombre y apellido" autocomplete="off" />
+                </label>
+                <label>Rol *
+                  <select id="u_rol">
+                    <option value="">(Seleccionar)</option>
+                    <option value="Admin">Admin</option>
+                    <option value="Supervisor">Supervisor</option>
+                    <option value="Operador">Operador</option>
+                    <option value="Consulta">Consulta</option>
+                  </select>
+                </label>
+                <label class="check">
+                  <input id="u_activo" type="checkbox" checked />
+                  Activo
+                </label>
+              </div>
+              <div class="actions-row">
+                <button class="btn primary" type="button" onclick="upsertUser()">Guardar</button>
+                <button class="btn" type="button" onclick="clearUserForm()">Limpiar</button>
+              </div>
+              <p class="hint" id="usersHint"></p>
+              <p class="error hidden" id="usersError" role="alert"></p>
+            </div>
+
+            <div class="users-list users-list--grow">
+              <div class="row between">
+                <h4 class="h4">Listado</h4>
+                <button class="btn" type="button" onclick="loadUsers()">Refrescar</button>
+              </div>
+              <div class="table-wrap users-table-wrap users-table-wrap--fill" aria-label="Tabla de usuarios">
+                <table class="grid" id="usersGrid"></table>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ... resto del HTML sin cambios estructurales: drawer, modales, toasts y loading ... -->
+    </section>
+  </main>
+  <script src="./app.js"></script>
+</body>
+</html>

@@ -64,6 +64,11 @@
           Tablero
         </button>
 
+        <button class="tab" id="tab-resumen-territorial" type="button" data-view="resumen-territorial" role="tab"
+          aria-controls="view-resumen-territorial">
+          Resumen territorial
+        </button>
+
         <button class="tab hidden" id="tab-usuarios" type="button" data-view="usuarios" role="tab"
           aria-controls="view-usuarios">
           Usuarios
@@ -188,6 +193,48 @@
               allowfullscreen
               sandbox="allow-storage-access-by-user-activation allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox"
               title="Tablero Looker Studio"></iframe>
+          </div>
+        </div>
+      </section>
+
+      <!-- VIEW: RESUMEN TERRITORIAL -->
+      <section id="view-resumen-territorial" class="view hidden" role="tabpanel"
+        aria-labelledby="tab-resumen-territorial">
+        <div class="card resumen-toolbar">
+          <div class="card-head row">
+            <div>
+              <h3 class="h3">Resumen territorial</h3>
+              <p class="hint">Vista ejecutiva por departamento y localidad.</p>
+            </div>
+          </div>
+
+          <div class="resumen-filtros">
+            <div class="field">
+              <label for="rt_departamento">Departamento</label>
+              <select id="rt_departamento">
+                <option value="">(Seleccionar)</option>
+              </select>
+            </div>
+
+            <div class="field">
+              <label for="rt_localidad">Localidad</label>
+              <select id="rt_localidad" disabled>
+                <option value="">(Seleccionar)</option>
+              </select>
+            </div>
+
+            <div class="resumen-actions">
+              <button class="btn primary" id="btnResumenVer" type="button">Ver resumen</button>
+              <button class="btn" id="btnResumenLimpiar" type="button">Limpiar</button>
+              <button class="btn" id="btnResumenExport" type="button">Exportar PDF</button>
+            </div>
+          </div>
+        </div>
+
+        <div id="resumenTerritorialContent" class="resumen-territorial">
+          <div class="card resumen-empty">
+            <h4 class="h4">Selecciona una localidad</h4>
+            <p class="hint">El resumen mostrara ficha editable, metricas, gestiones y timeline de eventos.</p>
           </div>
         </div>
       </section>
