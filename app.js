@@ -744,6 +744,10 @@ function wireUI() {
   $id("btnResumenLimpiar")?.addEventListener("click", clearResumenTerritorial);
   $id("btnClearResumen")?.addEventListener("click", clearResumenTerritorial);
   $id("btnResumenExport")?.addEventListener("click", exportResumenTerritorialPdf);
+  $id("appDialogConfirm")?.addEventListener("click", () => closeAppDialog(true));
+  $id("appDialogCancel")?.addEventListener("click", () => closeAppDialog(false));
+  $id("appDialogCloseBtn")?.addEventListener("click", () => closeAppDialog(false));
+  $id("appDialogOverlay")?.addEventListener("click", () => closeAppDialog(false));
 
   // click afuera para cerrar popover
   document.addEventListener("click", (e) => {
@@ -761,6 +765,7 @@ function wireUI() {
       closeModal("modalNewGestion");
       closeModal("modalChangeState");
       closeModal("modalEventos");
+      closeAppDialog(false);
       closeDrawer();
       closePopover("btnColumns", "columnsPanel");
     }
@@ -854,6 +859,7 @@ function setTab(tab) {
 // Modales + Drawer
 // ============================
 let LAST_FOCUS = null;
+let APP_DIALOG_RESOLVE = null;
 
 function focusFirstIn(container) {
   if (!container) return;
@@ -881,6 +887,47 @@ function closeModal(id) {
   if (!anyOpen) document.body.classList.remove("modal-open");
 
   try { LAST_FOCUS?.focus?.({ preventScroll: true }); } catch { }
+}
+
+function openAppDialog({
+  title = "Infra Gestion",
+  subtitle = "Mensaje del sistema",
+  message = "",
+  confirmText = "Aceptar",
+  cancelText = "",
+} = {}) {
+  const modal = $id("modalAppDialog");
+  const titleEl = $id("appDialogTitle");
+  const subtitleEl = $id("appDialogSubtitle");
+  const messageEl = $id("appDialogMessage");
+  const confirmBtn = $id("appDialogConfirm");
+  const cancelBtn = $id("appDialogCancel");
+
+  if (!modal || !titleEl || !subtitleEl || !messageEl || !confirmBtn || !cancelBtn) {
+    return Promise.resolve(false);
+  }
+
+  titleEl.textContent = title;
+  subtitleEl.textContent = subtitle;
+  messageEl.textContent = message;
+  confirmBtn.textContent = confirmText || "Aceptar";
+  cancelBtn.textContent = cancelText || "Cancelar";
+  cancelBtn.classList.toggle("hidden", !cancelText);
+
+  openModal("modalAppDialog");
+
+  return new Promise((resolve) => {
+    APP_DIALOG_RESOLVE = resolve;
+  });
+}
+
+function closeAppDialog(result = false) {
+  closeModal("modalAppDialog");
+  if (typeof APP_DIALOG_RESOLVE === "function") {
+    const resolve = APP_DIALOG_RESOLVE;
+    APP_DIALOG_RESOLVE = null;
+    resolve(result);
+  }
 }
 
 function openDrawer() {
@@ -1181,6 +1228,20 @@ function parseMetadata(metadata) {
   }
 }
 
+function getMinisterioNombre(value) {
+  if (!value) return "-";
+  const minMap = new Map((CATALOGOS.ministerios || []).map((m) => [m.id, m.nombre]));
+  return minMap.get(value) || String(value);
+}
+
+function getResumenUrgenciaClass(value) {
+  const urgencia = String(value || "").trim().toLowerCase();
+  if (urgencia === "alta") return "chip-priority chip-priority--alta";
+  if (urgencia === "media") return "chip-priority chip-priority--media";
+  if (urgencia === "baja") return "chip-priority chip-priority--baja";
+  return "chip-priority";
+}
+
 function renderResumenEvento(evento) {
   const tipo = pick(evento, "tipo_evento") || "-";
   const fecha = normalizarResumenFecha(pick(evento, "fecha_evento"));
@@ -1193,6 +1254,8 @@ function renderResumenEvento(evento) {
   const valorAnterior = pick(evento, "valor_anterior");
   const valorNuevo = pick(evento, "valor_nuevo");
   const meta = parseMetadata(pick(evento, "metadata_json")) || {};
+  const ministerioIngreso = getMinisterioNombre(meta.ministerio_agencia_id);
+  const ministerioDerivado = getMinisterioNombre(meta.derivado_a || meta.derivado_a_id);
 
   const metaLines = [];
   if (campoModificado) {
@@ -1213,6 +1276,8 @@ function renderResumenEvento(evento) {
         </div>
         <div class="resumen-evento-meta">${escapeHtml(usuario)} · ${escapeHtml(rol)}</div>
         <div class="resumen-evento-state">Estado: ${escapeHtml(estadoAnterior)} → ${escapeHtml(estadoNuevo)}</div>
+        ${tipo === "CREACION" ? `<div class="resumen-evento-state">Ministerio: ${escapeHtml(ministerioIngreso)}</div>` : ``}
+        ${tipo === "CAMBIO_ESTADO" && (meta.derivado_a || meta.derivado_a_id) ? `<div class="resumen-evento-state">Ministerio destino: ${escapeHtml(ministerioDerivado)}</div>` : ``}
         ${campoModificado ? `<div class="resumen-evento-state">Cambio: ${escapeHtml(campoModificado)} | ${escapeHtml(valorAnterior ?? "-")} → ${escapeHtml(valorNuevo ?? "-")}</div>` : ``}
         ${comentario ? `<div class="resumen-evento-comment">${escapeHtml(comentario)}</div>` : ``}
         ${metaLines.length ? `<div class="resumen-evento-tags">${metaLines.join("")}</div>` : ``}
@@ -1224,13 +1289,11 @@ function renderResumenEvento(evento) {
 function renderResumenGestion(item) {
   const gestion = item?.gestion || {};
   const eventos = Array.isArray(item?.eventos) ? item.eventos : [];
-
-  const minMap = new Map((CATALOGOS.ministerios || []).map((m) => [m.id, m.nombre]));
   const catMap = new Map((CATALOGOS.categorias || []).map((c) => [c.id, c.nombre]));
   const tipoMap = new Map((CATALOGOS.tiposGestion || []).map((t) => [t.id, t.nombre]));
   const canalMap = new Map((CATALOGOS.canalesOrigen || []).map((c) => [c.id, c.nombre]));
 
-  const ministerio = minMap.get(pick(gestion, "ministerio_agencia_id")) || pick(gestion, "ministerio_agencia_id") || "-";
+  const ministerio = getMinisterioNombre(pick(gestion, "ministerio_agencia_id"));
   const categoria = catMap.get(pick(gestion, "categoria_general_id")) || pick(gestion, "categoria_general_id") || "-";
   const tipoGestion = tipoMap.get(pick(gestion, "tipo_gestion")) || pick(gestion, "tipo_gestion") || "-";
   const canalOrigen = canalMap.get(pick(gestion, "canal_origen")) || pick(gestion, "canal_origen") || "-";
@@ -1238,6 +1301,8 @@ function renderResumenGestion(item) {
   const costo = pick(gestion, "costo_estimado");
   const moneda = pick(gestion, "costo_moneda");
   const costoText = costo == null || costo === "" ? "-" : `${costo}${moneda ? ` ${moneda}` : ""}`;
+  const urgencia = pick(gestion, "urgencia") || "-";
+  const estado = pick(gestion, "estado") || "-";
 
   return `
     <article class="card resumen-gestion-card">
@@ -1247,8 +1312,14 @@ function renderResumenGestion(item) {
           <p class="hint">${escapeHtml(pick(gestion, "departamento") || "")} · ${escapeHtml(pick(gestion, "localidad") || "")}</p>
         </div>
         <div class="resumen-gestion-badges">
-          <span class="chip">${escapeHtml(pick(gestion, "estado") || "-")}</span>
-          <span class="chip">${escapeHtml(pick(gestion, "urgencia") || "-")}</span>
+          <div class="chip chip-stack">
+            <span class="chip-stack-label">Estado:</span>
+            <span class="chip-stack-value">${escapeHtml(estado)}</span>
+          </div>
+          <div class="${escapeHtml(getResumenUrgenciaClass(urgencia))} chip-stack">
+            <span class="chip-stack-label">Prioridad:</span>
+            <span class="chip-stack-value">${escapeHtml(urgencia)}</span>
+          </div>
         </div>
       </div>
 
@@ -1659,7 +1730,7 @@ function renderGrid(rows) {
     tdA.innerHTML = `
       <div class="actions-wrap">
         <button class="btn" type="button" onclick="openDetalle('${escapeHtml(id)}')">Ver</button>
-        <button class="btn" type="button" onclick="openChangeState('${escapeHtml(id)}')">Modificar Estado</button>
+        <button class="btn" type="button" onclick="openChangeState('${escapeHtml(id)}')">Modificar</button>
         <button class="btn" type="button" onclick="openEventos('${escapeHtml(id)}')">Eventos</button>
         ${canDelete ? `<button class="btn btn-danger" type="button" onclick="deleteGestion('${escapeHtml(id)}')">Eliminar</button>` : ``}
       </div>
@@ -1849,7 +1920,13 @@ async function openEventos(id) {
 // ============================
 async function deleteGestion(id) {
   if (!id) return;
-  const ok = confirm(`Seguro que queres eliminar (borrado logico) la gestion?\n\nID: ${id}`);
+  const ok = await openAppDialog({
+    title: "Infra Gestion",
+    subtitle: "Confirmacion requerida",
+    message: `Estas por eliminar la gestion ${id}. La accion realiza un borrado logico y quedara registrada en el historial.`,
+    confirmText: "Eliminar",
+    cancelText: "Cancelar",
+  });
   if (!ok) return;
 
   try {
@@ -1858,7 +1935,12 @@ async function deleteGestion(id) {
     toast({ title: "Gestion eliminada", message: `ID ${id}`, variant: "ok" });
     await loadGestiones(true);
   } catch (e) {
-    alert("No se pudo eliminar la gestion.\n\nDetalle: " + (e?.message || String(e)));
+    await openAppDialog({
+      title: "Infra Gestion",
+      subtitle: "No se pudo completar la operacion",
+      message: "No se pudo eliminar la gestion. " + (e?.message || String(e)),
+      confirmText: "Cerrar",
+    });
   } finally {
     setGlobalLoading(false);
   }
@@ -1924,7 +2006,12 @@ async function openChangeState(id) {
     }
     openModal("modalChangeState");
   } catch (e) {
-    alert("No se pudo cargar la gestion para editar.\n\n" + (e?.message || String(e)));
+    await openAppDialog({
+      title: "Infra Gestion",
+      subtitle: "No se pudo abrir la gestion",
+      message: "No se pudo cargar la gestion para editar. " + (e?.message || String(e)),
+      confirmText: "Cerrar",
+    });
   } finally {
     setGlobalLoading(false);
   }
@@ -1941,14 +2028,19 @@ async function submitChangeState() {
   const departamento = $id("cs_departamento")?.value || null;
   const localidad = $id("cs_localidad")?.value || null;
 
-  if (!id) return alert("Falta id_gestion");
-  if (!nuevo) return alert("Selecciona un estado");
-  if (!departamento) return alert("Selecciona un departamento");
-  if (!localidad) return alert("Selecciona una localidad");
+  if (!id) return openAppDialog({ title: "Infra Gestion", subtitle: "Dato faltante", message: "Falta el identificador de la gestion.", confirmText: "Cerrar" });
+  if (!nuevo) return openAppDialog({ title: "Infra Gestion", subtitle: "Dato faltante", message: "Selecciona un estado.", confirmText: "Cerrar" });
+  if (!departamento) return openAppDialog({ title: "Infra Gestion", subtitle: "Dato faltante", message: "Selecciona un departamento.", confirmText: "Cerrar" });
+  if (!localidad) return openAppDialog({ title: "Infra Gestion", subtitle: "Dato faltante", message: "Selecciona una localidad.", confirmText: "Cerrar" });
 
   const nuevoUp = String(nuevo || "").toUpperCase();
   if ((nuevoUp === "ARCHIVADO" || nuevoUp === "NO REMITE SUAC") && (!comentario || String(comentario).trim() === "")) {
-    return alert("Comentario es obligatorio para ARCHIVADO / NO REMITE SUAC");
+    return openAppDialog({
+      title: "Infra Gestion",
+      subtitle: "Validacion",
+      message: "El comentario es obligatorio para ARCHIVADO y NO REMITE SUAC.",
+      confirmText: "Cerrar",
+    });
   }
 
   setGlobalLoading(true, "Guardando cambios...");
@@ -1970,6 +2062,13 @@ async function submitChangeState() {
     closeModal("modalChangeState");
     toast({ title: "Cambios guardados", message: `Gestion ${id}`, variant: "ok" });
     await loadGestiones(false);
+  } catch (e) {
+    await openAppDialog({
+      title: "Infra Gestion",
+      subtitle: "No se pudo completar la operacion",
+      message: "No se pudieron guardar los cambios de la gestion. " + (e?.message || String(e)),
+      confirmText: "Cerrar",
+    });
   } finally {
     setGlobalLoading(false);
   }
@@ -2029,11 +2128,11 @@ async function submitNewGestion() {
     const costo_moneda = getVal("ng_costo_moneda") || "ARS";
     const nro_expediente = getVal("ng_nro_expediente", "") || null;
 
-    if (!ministerio) return alert("Selecciona un ministerio/agencia");
-    if (!categoria) return alert("Selecciona una categoria");
-    if (!departamento) return alert("Selecciona un departamento");
-    if (!localidad) return alert("Selecciona una localidad");
-    if (!detalle || detalle.trim() === "") return alert("Detalle es obligatorio");
+    if (!ministerio) return openAppDialog({ title: "Infra Gestion", subtitle: "Dato faltante", message: "Selecciona un ministerio o agencia.", confirmText: "Cerrar" });
+    if (!categoria) return openAppDialog({ title: "Infra Gestion", subtitle: "Dato faltante", message: "Selecciona una categoria.", confirmText: "Cerrar" });
+    if (!departamento) return openAppDialog({ title: "Infra Gestion", subtitle: "Dato faltante", message: "Selecciona un departamento.", confirmText: "Cerrar" });
+    if (!localidad) return openAppDialog({ title: "Infra Gestion", subtitle: "Dato faltante", message: "Selecciona una localidad.", confirmText: "Cerrar" });
+    if (!detalle || detalle.trim() === "") return openAppDialog({ title: "Infra Gestion", subtitle: "Dato faltante", message: "El detalle es obligatorio.", confirmText: "Cerrar" });
 
     setGlobalLoading(true, "Validando datos...");
     await api(`/catalogos/geo?departamento=${encodeURIComponent(departamento)}&localidad=${encodeURIComponent(localidad)}`);
@@ -2066,13 +2165,23 @@ async function submitNewGestion() {
 
     if (resp?.id_gestion) {
       toast({ title: "Gestion creada", message: `ID ${resp.id_gestion}`, variant: "ok" });
-      alert(`Gestion creada: ${resp.id_gestion}`);
+      await openAppDialog({
+        title: "Infra Gestion",
+        subtitle: "Operacion completada",
+        message: `La gestion se creo correctamente con el ID ${resp.id_gestion}.`,
+        confirmText: "Aceptar",
+      });
     } else {
       toast({ title: "Gestion creada", message: "Se creo correctamente.", variant: "ok" });
     }
   } catch (e) {
     console.error(e);
-    alert("No se pudo crear la gestion.\n\nDetalle: " + (e?.message || String(e)));
+    await openAppDialog({
+      title: "Infra Gestion",
+      subtitle: "No se pudo completar la operacion",
+      message: "No se pudo crear la gestion. " + (e?.message || String(e)),
+      confirmText: "Cerrar",
+    });
   } finally {
     setGlobalLoading(false);
   }

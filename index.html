@@ -8,7 +8,7 @@
   <meta name="theme-color" content="#0f172a">
   <title>Infra Gestión</title>
 
-  <link rel="stylesheet" href="./styles.css?v=20260316-1" />
+  <link rel="stylesheet" href="./styles.css?v=20260316-2" />
 
   <!-- Google Identity Services -->
   <script src="https://accounts.google.com/gsi/client" async defer></script>
@@ -482,6 +482,27 @@
         </div>
       </div>
 
+      <!-- MODAL: DIALOGO APP -->
+      <div id="modalAppDialog" class="modal hidden" role="dialog" aria-modal="true" aria-hidden="true">
+        <div class="modal-overlay" id="appDialogOverlay"></div>
+        <div class="modal-card modal-card-sm" role="document">
+          <div class="modal-head">
+            <div>
+              <h3 class="h3" id="appDialogTitle">Infra Gestion</h3>
+              <p class="hint" id="appDialogSubtitle">Mensaje del sistema</p>
+            </div>
+            <button class="btn ghost modal-x" type="button" id="appDialogCloseBtn" aria-label="Cerrar">×</button>
+          </div>
+          <div class="dialog-body">
+            <p id="appDialogMessage" class="dialog-message"></p>
+          </div>
+          <div class="modal-actions">
+            <button class="btn hidden" type="button" id="appDialogCancel">Cancelar</button>
+            <button class="btn primary" type="button" id="appDialogConfirm">Aceptar</button>
+          </div>
+        </div>
+      </div>
+
       <!-- Toasts + Loading -->
       <div id="toastHost" class="toast-host" aria-live="polite" aria-atomic="true"></div>
       <div id="globalLoading" class="global-loading hidden" aria-hidden="true">
@@ -493,7 +514,7 @@
     </section>
   </main>
 
-  <script src="./app.js?v=20260316-1"></script>
+  <script src="./app.js?v=20260316-2"></script>
 </body>
 
 </html>
