@@ -1365,7 +1365,7 @@ function renderResumenTerritorial() {
         <div class="resumen-card-head">
           <div>
             <h3 class="h3">Ficha de localidad</h3>
-            <p class="hint">Persistida en BigQuery, sin localStorage.</p>
+            <p class="hint">Información socio-política de la localidad.</p>
           </div>
           <div class="resumen-actions no-print">
             ${editing ? `
