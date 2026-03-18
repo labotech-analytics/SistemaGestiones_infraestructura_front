@@ -847,7 +847,7 @@ function setTab(tab) {
     setTimeout(() => reloadDashboard({ silent: true }), 250);
   }
 
-  if (tab === "resumen-territorial" && RESUMEN_TERRITORIAL.departamento && RESUMEN_TERRITORIAL.localidad && !RESUMEN_TERRITORIAL.data) {
+  if (tab === "resumen-territorial" && RESUMEN_TERRITORIAL.departamento && !RESUMEN_TERRITORIAL.data) {
     loadResumenTerritorial().catch((e) => {
       console.error(e);
       setAppError("No se pudo cargar el resumen territorial. " + (e?.message || String(e)));
@@ -1158,7 +1158,7 @@ function resumenFieldRow(label, value) {
   `;
 }
 
-function renderResumenTerritorialEmpty(message = "Selecciona una localidad para ver el resumen.") {
+function renderResumenTerritorialEmpty(message = "Selecciona un departamento o una localidad para ver el resumen.") {
   const host = $id("resumenTerritorialContent") || $id("summaryContent");
   if (!host) return;
   host.innerHTML = `
@@ -1202,7 +1202,7 @@ async function onResumenTerritorialDeptoChange() {
     opt.textContent = l;
     locSel.appendChild(opt);
   });
-  renderResumenTerritorialEmpty("Selecciona una localidad y presiona Ver resumen.");
+  renderResumenTerritorialEmpty("Selecciona una localidad para ver el resumen de la localidad, o deja localidad vacia para ver todo el departamento.");
 }
 
 function onResumenTerritorialLocalidadChange() {
@@ -1345,7 +1345,7 @@ function renderResumenGestion(item) {
   `;
 }
 
-function renderResumenTerritorial() {
+function renderResumenTerritorialLegacy() {
   const host = $id("resumenTerritorialContent") || $id("summaryContent");
   const data = RESUMEN_TERRITORIAL.data;
   if (!host) return;
@@ -1453,7 +1453,7 @@ function renderResumenTerritorial() {
   $id("btnResumenGuardarFicha")?.addEventListener("click", saveResumenTerritorialFicha);
 }
 
-async function loadResumenTerritorial() {
+async function loadResumenTerritorialLegacy() {
   const { departamento, localidad } = getResumenSelection();
   if (!departamento) return alert("Selecciona un departamento");
   if (!localidad) return alert("Selecciona una localidad");
@@ -1465,6 +1465,190 @@ async function loadResumenTerritorial() {
   setGlobalLoading(true, "Cargando resumen territorial...");
   try {
     const qs = new URLSearchParams({ departamento, localidad });
+    const data = await api(`/gestiones/resumen-territorial?${qs.toString()}`);
+    RESUMEN_TERRITORIAL.data = data;
+    renderResumenTerritorial();
+  } catch (e) {
+    console.error(e);
+    RESUMEN_TERRITORIAL.data = null;
+    renderResumenTerritorialEmpty("No se pudo cargar el resumen territorial.");
+    alert("No se pudo cargar el resumen territorial.\n\nDetalle: " + (e?.message || String(e)));
+  } finally {
+    setGlobalLoading(false);
+  }
+}
+
+async function saveResumenTerritorialFichaLegacy() {
+  if (!RESUMEN_TERRITORIAL.departamento || !RESUMEN_TERRITORIAL.localidad) return;
+
+  const habitantesRaw = $id("rtf_habitantes")?.value ?? "";
+  const electoresRaw = $id("rtf_electores")?.value ?? "";
+  const payload = {
+    departamento: RESUMEN_TERRITORIAL.departamento,
+    localidad: RESUMEN_TERRITORIAL.localidad,
+    habitantes: habitantesRaw === "" ? null : Number(habitantesRaw),
+    electores: electoresRaw === "" ? null : Number(electoresRaw),
+    intendente_jefe_comunal: ($id("rtf_intendente")?.value || "").trim() || null,
+    partido_politico: ($id("rtf_partido")?.value || "").trim() || null,
+  };
+
+  setGlobalLoading(true, "Guardando ficha de localidad...");
+  try {
+    const info = await api(`/localidades-info`, { method: "PUT", body: payload });
+    if (!RESUMEN_TERRITORIAL.data) RESUMEN_TERRITORIAL.data = {};
+    RESUMEN_TERRITORIAL.data.localidad_info = info;
+    RESUMEN_TERRITORIAL.editing = false;
+    renderResumenTerritorial();
+    toast({ title: "Ficha actualizada", message: `${payload.localidad}`, variant: "ok" });
+  } catch (e) {
+    console.error(e);
+    alert("No se pudo guardar la ficha de localidad.\n\nDetalle: " + (e?.message || String(e)));
+  } finally {
+    setGlobalLoading(false);
+  }
+}
+
+function renderResumenTerritorial() {
+  const host = $id("resumenTerritorialContent") || $id("summaryContent");
+  const data = RESUMEN_TERRITORIAL.data;
+  if (!host) return;
+  if (!data) {
+    renderResumenTerritorialEmpty();
+    return;
+  }
+
+  const isDepartamento = data.scope === "departamento";
+  const info = data.territorio_info || data.localidad_info || data.departamento_info || {};
+  const metricas = data.metricas || {};
+  const gestiones = Array.isArray(data.gestiones) ? data.gestiones : [];
+  const editing = !isDepartamento && !!RESUMEN_TERRITORIAL.editing;
+  const fichaTitulo = isDepartamento ? "Ficha de Departamento" : "Ficha de localidad";
+  const fichaDescripcion = isDepartamento
+    ? "Informacion socio-politica del departamento"
+    : "Informacion socio-politica de la localidad.";
+  const listadoTitulo = isDepartamento ? "Gestiones del departamento" : "Gestiones de la localidad";
+  const listadoVacio = isDepartamento ? "No hay gestiones para este departamento." : "No hay gestiones para esta localidad.";
+
+  host.innerHTML = `
+    <div class="resumen-grid">
+      <section class="card resumen-ficha-card print-block">
+        <div class="resumen-card-head">
+          <div>
+            <h3 class="h3">${escapeHtml(fichaTitulo)}</h3>
+            <p class="hint">${escapeHtml(fichaDescripcion)}</p>
+          </div>
+          <div class="resumen-actions no-print">
+            ${editing ? `
+              <button class="btn primary" id="btnResumenGuardarFicha" type="button">Guardar</button>
+              <button class="btn" id="btnResumenCancelarFicha" type="button">Cancelar</button>
+            ` : !isDepartamento ? `
+              <button class="btn" id="btnResumenEditarFicha" type="button">Editar</button>
+            ` : ``}
+          </div>
+        </div>
+
+        ${editing ? `
+          <div class="resumen-ficha-form">
+            <label>Localidad
+              <input id="rtf_localidad" type="text" value="${escapeHtml(info.localidad || "")}" disabled />
+            </label>
+            <label>Habitantes
+              <input id="rtf_habitantes" type="number" min="0" value="${escapeHtml(info.habitantes ?? "")}" />
+            </label>
+            <label>Electores
+              <input id="rtf_electores" type="number" min="0" value="${escapeHtml(info.electores ?? "")}" />
+            </label>
+            <label>Intendente / Jefe comunal
+              <input id="rtf_intendente" type="text" value="${escapeHtml(info.intendente_jefe_comunal || "")}" />
+            </label>
+            <label>Partido politico
+              <input id="rtf_partido" type="text" value="${escapeHtml(info.partido_politico || "")}" />
+            </label>
+          </div>
+        ` : `
+          <div class="resumen-ficha-grid">
+            ${isDepartamento ? `
+              ${resumenFieldRow("Departamento", info.departamento)}
+              ${resumenFieldRow("Habitantes", info.habitantes)}
+              ${resumenFieldRow("Electores", info.electores)}
+              ${resumenFieldRow("Legislador departamental", info.legislador_departamental)}
+              ${resumenFieldRow("Partido politico", info.partido_politico)}
+              ${resumenFieldRow("Legislador sabana 1", info.legislador_sabana1)}
+              ${resumenFieldRow("Partido politico (sabana 1)", info.partido_politico_sabana1)}
+              ${resumenFieldRow("Legislador sabana 2", info.legislador_sabana2)}
+              ${resumenFieldRow("Partido politico (sabana 2)", info.partido_politico_sabana2)}
+              ${resumenFieldRow("Ultima actualizacion", normalizarResumenFecha(info.updated_at))}
+              ${resumenFieldRow("Actualizado por", info.updated_by)}
+            ` : `
+              ${resumenFieldRow("Departamento", info.departamento)}
+              ${resumenFieldRow("Localidad", info.localidad)}
+              ${resumenFieldRow("Habitantes", info.habitantes)}
+              ${resumenFieldRow("Electores", info.electores)}
+              ${resumenFieldRow("Intendente / Jefe comunal", info.intendente_jefe_comunal)}
+              ${resumenFieldRow("Partido politico", info.partido_politico)}
+              ${resumenFieldRow("Ultima actualizacion", normalizarResumenFecha(info.updated_at))}
+              ${resumenFieldRow("Actualizado por", info.updated_by)}
+            `}
+          </div>
+        `}
+      </section>
+
+      <section class="resumen-kpis print-block">
+        <div class="card resumen-kpi">
+          <span>Total gestiones</span>
+          <strong>${escapeHtml(metricas.total_gestiones ?? 0)}</strong>
+        </div>
+        <div class="card resumen-kpi">
+          <span>Abiertas</span>
+          <strong>${escapeHtml(metricas.abiertas ?? 0)}</strong>
+        </div>
+        <div class="card resumen-kpi">
+          <span>Finalizadas</span>
+          <strong>${escapeHtml(metricas.finalizadas ?? 0)}</strong>
+        </div>
+        <div class="card resumen-kpi">
+          <span>Urgentes</span>
+          <strong>${escapeHtml(metricas.urgentes ?? 0)}</strong>
+        </div>
+      </section>
+    </div>
+
+    <section class="resumen-listado print-block">
+      <div class="card resumen-card-head">
+        <div>
+          <h3 class="h3">${escapeHtml(listadoTitulo)}</h3>
+          <p class="hint">${escapeHtml(String(gestiones.length))} registradas</p>
+        </div>
+      </div>
+      <div class="resumen-gestiones-list">
+        ${gestiones.length ? gestiones.map(renderResumenGestion).join("") : `<div class="card"><p class="hint">${escapeHtml(listadoVacio)}</p></div>`}
+      </div>
+    </section>
+  `;
+
+  $id("btnResumenEditarFicha")?.addEventListener("click", () => {
+    RESUMEN_TERRITORIAL.editing = true;
+    renderResumenTerritorial();
+  });
+  $id("btnResumenCancelarFicha")?.addEventListener("click", () => {
+    RESUMEN_TERRITORIAL.editing = false;
+    renderResumenTerritorial();
+  });
+  $id("btnResumenGuardarFicha")?.addEventListener("click", saveResumenTerritorialFicha);
+}
+
+async function loadResumenTerritorial() {
+  const { departamento, localidad } = getResumenSelection();
+  if (!departamento) return alert("Selecciona un departamento");
+
+  RESUMEN_TERRITORIAL.departamento = departamento;
+  RESUMEN_TERRITORIAL.localidad = localidad;
+  RESUMEN_TERRITORIAL.editing = false;
+
+  setGlobalLoading(true, "Cargando resumen territorial...");
+  try {
+    const qs = new URLSearchParams({ departamento });
+    if (localidad) qs.set("localidad", localidad);
     const data = await api(`/gestiones/resumen-territorial?${qs.toString()}`);
     RESUMEN_TERRITORIAL.data = data;
     renderResumenTerritorial();
@@ -1496,6 +1680,7 @@ async function saveResumenTerritorialFicha() {
   try {
     const info = await api(`/localidades-info`, { method: "PUT", body: payload });
     if (!RESUMEN_TERRITORIAL.data) RESUMEN_TERRITORIAL.data = {};
+    RESUMEN_TERRITORIAL.data.territorio_info = info;
     RESUMEN_TERRITORIAL.data.localidad_info = info;
     RESUMEN_TERRITORIAL.editing = false;
     renderResumenTerritorial();
