@@ -8,10 +8,17 @@
   <meta name="theme-color" content="#0f172a">
   <title>Infra Gestión</title>
 
-  <link rel="stylesheet" href="./styles.css?v=20260316-2" />
+  <link rel="stylesheet" href="./styles.css?v=20260406" />
 
   <!-- Google Identity Services -->
   <script src="https://accounts.google.com/gsi/client" async defer></script>
+
+  <!-- SheetJS para exportar Excel -->
+  <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
+
+  <!-- jsPDF + autoTable para exportar PDF -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
 </head>
 
 <body>
@@ -160,14 +167,25 @@
         </div>
 
         <div class="subbar">
-          <div id="pagerInfo" class="hint" aria-live="polite"></div>
-
-          <div class="pager">
-            <button class="btn" id="btnPrev" type="button">Anterior</button>
-            <button class="btn" id="btnNext" type="button">Siguiente</button>
+          <div class="subbar-left">
+            <div id="pagerInfo" class="hint" aria-live="polite"></div>
+            <div class="pager">
+              <button class="btn" id="btnPrev" type="button">Anterior</button>
+              <button class="btn" id="btnNext" type="button">Siguiente</button>
+            </div>
+            <div class="hint" id="hintTable">Tip: en pantallas chicas podés ocultar columnas desde “Columnas”.</div>
           </div>
 
-          <div class="hint" id="hintTable">Tip: en pantallas chicas podés ocultar columnas desde “Columnas”.</div>
+          <!-- Botón exportar tabla -->
+          <div class="export-dropdown" id="exportDropdown">
+            <button class="btn" type="button" id="btnExportToggle" onclick="toggleExportMenu(event)" aria-haspopup="true" aria-expanded="false">
+              Exportar tabla &#9660;
+            </button>
+            <div class="export-menu hidden" id="exportMenu" role="menu">
+              <button class="export-menu-item" type="button" onclick="exportGestiones('excel')" role="menuitem">Excel (.xlsx)</button>
+              <button class="export-menu-item" type="button" onclick="exportGestiones('pdf')" role="menuitem">PDF</button>
+            </div>
+          </div>
         </div>
 
         <div class="table-wrap" aria-label="Tabla de gestiones">
@@ -514,7 +532,7 @@
     </section>
   </main>
 
-  <script src="./app.js?v=20260316-2"></script>
+  <script src="./app.js?v=20260406"></script>
 </body>
 
 </html>

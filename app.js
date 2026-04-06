@@ -2647,3 +2647,226 @@ window.copyToClipboard = copyToClipboard;
 window.reloadDashboard = reloadDashboard;
 window.loadResumenTerritorial = loadResumenTerritorial;
 window.clearResumenTerritorial = clearResumenTerritorial;
+
+// Exportar
+window.exportGestiones = exportGestiones;
+window.toggleExportMenu = toggleExportMenu;
+
+// ============================
+// Exportar tabla de gestiones
+// ============================
+
+function toggleExportMenu(e) {
+  e.stopPropagation();
+  const menu = $id("exportMenu");
+  const btn = $id("btnExportToggle");
+  if (!menu) return;
+  const isHidden = menu.classList.contains("hidden");
+  menu.classList.toggle("hidden", !isHidden);
+  btn?.setAttribute("aria-expanded", isHidden ? "true" : "false");
+}
+
+// Cierra el menu de exportar si se hace click afuera
+document.addEventListener("click", (e) => {
+  const menu = $id("exportMenu");
+  const dropdown = $id("exportDropdown");
+  if (!menu || menu.classList.contains("hidden")) return;
+  if (dropdown && dropdown.contains(e.target)) return;
+  menu.classList.add("hidden");
+  $id("btnExportToggle")?.setAttribute("aria-expanded", "false");
+});
+
+// Labels legibles para cada columna
+const EXPORT_COLS = [
+  { key: "id_gestion",          label: "ID Gestion" },
+  { key: "departamento",        label: "Departamento" },
+  { key: "localidad",           label: "Localidad" },
+  { key: "estado",              label: "Estado" },
+  { key: "urgencia",            label: "Urgencia" },
+  { key: "ministerio_agencia_id", label: "Ministerio/Agencia" },
+  { key: "categoria_general_id",  label: "Categoria" },
+  { key: "tipo_gestion",        label: "Tipo de gestion" },
+  { key: "canal_origen",        label: "Canal de origen" },
+  { key: "detalle",             label: "Detalle" },
+  { key: "nro_expediente",      label: "Nro. Expediente" },
+  { key: "costo_estimado",      label: "Costo estimado" },
+  { key: "costo_moneda",        label: "Moneda" },
+  { key: "fecha_ingreso",       label: "Fecha ingreso" },
+  { key: "dias_transcurridos",  label: "Dias transcurridos" },
+];
+
+async function exportGestiones(formato) {
+  // Cerrar el menu
+  $id("exportMenu")?.classList.add("hidden");
+  $id("btnExportToggle")?.setAttribute("aria-expanded", "false");
+
+  const filters = currentFilters();
+  const { estado, ministerio, categoria, departamento, localidad, q, tipo_gestion, canal_origen } = filters;
+
+  // Construir descripcion del filtro activo para el encabezado
+  const partesFiltro = [];
+  if (departamento) partesFiltro.push("Departamento: " + departamento);
+  if (localidad) partesFiltro.push("Localidad: " + localidad);
+  if (estado) partesFiltro.push("Estado: " + estado);
+  if (ministerio) {
+    const min = (CATALOGOS.ministerios || []).find(m => m.id === ministerio);
+    partesFiltro.push("Ministerio: " + (min ? min.nombre : ministerio));
+  }
+  if (categoria) {
+    const cat = (CATALOGOS.categorias || []).find(c => c.id === categoria);
+    partesFiltro.push("Categoria: " + (cat ? cat.nombre : categoria));
+  }
+  if (tipo_gestion) partesFiltro.push("Tipo: " + tipo_gestion);
+  if (canal_origen) partesFiltro.push("Canal: " + canal_origen);
+  if (q) partesFiltro.push('Busqueda: "' + q + '"');
+  const filtroTexto = partesFiltro.length ? partesFiltro.join(" | ") : "Sin filtros (todos los registros)";
+
+  // Fetch de TODOS los registros con los filtros actuales, respetando el limite maximo del backend.
+  const qs = new URLSearchParams();
+  if (estado) qs.set("estado", estado);
+  if (ministerio) qs.set("ministerio", ministerio);
+  if (categoria) qs.set("categoria", categoria);
+  if (departamento) qs.set("departamento", departamento);
+  if (localidad) qs.set("localidad", localidad);
+  if (tipo_gestion) qs.set("tipo_gestion", tipo_gestion);
+  if (canal_origen) qs.set("canal_origen", canal_origen);
+  if (q) qs.set("q", q);
+  const exportLimit = 200;
+  qs.set("limit", String(exportLimit));
+
+  setGlobalLoading(true, "Preparando exportacion...");
+  const rows = [];
+  try {
+    let offset = 0;
+    let total = null;
+
+    while (true) {
+      qs.set("offset", String(offset));
+
+      const resp = await api(`/gestiones/?${qs.toString()}`);
+      const pageRows = normalizeRows(resp);
+      rows.push(...pageRows);
+
+      total = resp?.total ?? resp?.count ?? total;
+      const progreso = total != null ? `${rows.length} de ${total}` : `${rows.length}`;
+      setGlobalLoading(true, `Preparando exportacion... ${progreso} gestiones`);
+
+      if (!pageRows.length) break;
+      if (total != null && rows.length >= total) break;
+      if (pageRows.length < exportLimit) break;
+
+      offset += exportLimit;
+    }
+  } catch (err) {
+    toast({ title: "Error al exportar", message: String(err.message || err), variant: "error" });
+    return;
+  } finally {
+    setGlobalLoading(false);
+  }
+
+  if (!rows.length) {
+    toast({ title: "Sin datos", message: "No hay gestiones que coincidan con los filtros aplicados.", variant: "error" });
+    return;
+  }
+
+  // Mapas para resolver IDs a nombres
+  const minMap = new Map((CATALOGOS.ministerios || []).map(m => [m.id, m.nombre]));
+  const catMap = new Map((CATALOGOS.categorias || []).map(c => [c.id, c.nombre]));
+  const tipoMap = new Map((CATALOGOS.tiposGestion || []).map(t => [t.id, t.nombre]));
+  const canalMap = new Map((CATALOGOS.canalesOrigen || []).map(c => [c.id, c.nombre]));
+
+  function resolveCell(key, val) {
+    if (val == null) return "";
+    if (key === "ministerio_agencia_id") return minMap.get(val) || val;
+    if (key === "categoria_general_id")  return catMap.get(val)  || val;
+    if (key === "tipo_gestion")           return tipoMap.get(val) || val;
+    if (key === "canal_origen")           return canalMap.get(val)|| val;
+    return val;
+  }
+
+  const fechaExport = new Date().toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit", year: "numeric" });
+  const nombreArchivo = "gestiones_" + (departamento || "todos") + (localidad ? "_" + localidad : "") + "_" + fechaExport.replace(/\//g, "-");
+
+  if (formato === "excel") {
+    exportarExcel(rows, resolveCell, filtroTexto, fechaExport, nombreArchivo);
+  } else {
+    exportarPdf(rows, resolveCell, filtroTexto, fechaExport, nombreArchivo);
+  }
+}
+
+function exportarExcel(rows, resolveCell, filtroTexto, fechaExport, nombreArchivo) {
+  const wb = XLSX.utils.book_new();
+
+  // Fila de titulo + filtros
+  const header = [
+    ["Infra Gestion - Secretaria de Infraestructura"],
+    ["Fecha de exportacion: " + fechaExport],
+    ["Filtros: " + filtroTexto],
+    ["Total de registros: " + rows.length],
+    [], // fila en blanco
+    EXPORT_COLS.map(c => c.label), // cabecera de columnas
+  ];
+
+  // Filas de datos
+  const dataRows = rows.map(row =>
+    EXPORT_COLS.map(col => resolveCell(col.key, row[col.key]))
+  );
+
+  const wsData = [...header, ...dataRows];
+  const ws = XLSX.utils.aoa_to_sheet(wsData);
+
+  // Ancho de columnas (estimado)
+  ws["!cols"] = EXPORT_COLS.map(col => ({
+    wch: col.key === "detalle" ? 60 : col.key === "id_gestion" ? 38 : 22
+  }));
+
+  XLSX.utils.book_append_sheet(wb, ws, "Gestiones");
+  XLSX.writeFile(wb, nombreArchivo + ".xlsx");
+
+  toast({ title: "Excel generado", message: rows.length + " gestiones exportadas.", variant: "ok" });
+}
+
+function exportarPdf(rows, resolveCell, filtroTexto, fechaExport, nombreArchivo) {
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
+
+  const pageW = doc.internal.pageSize.getWidth();
+
+  doc.setFontSize(14);
+  doc.setFont("helvetica", "bold");
+  doc.text("Infra Gestion - Secretaria de Infraestructura", pageW / 2, 14, { align: "center" });
+
+  doc.setFontSize(9);
+  doc.setFont("helvetica", "normal");
+  doc.text("Fecha: " + fechaExport + "   |   Total: " + rows.length + " registros", pageW / 2, 20, { align: "center" });
+  doc.text("Filtros: " + filtroTexto, pageW / 2, 26, { align: "center" });
+
+  // Columnas a incluir en PDF (excluir columnas muy anchas o poco utiles en papel)
+  const pdfCols = EXPORT_COLS.filter(c => c.key !== "id_gestion");
+
+  const tableHead = [pdfCols.map(c => c.label)];
+  const tableBody = rows.map(row => pdfCols.map(col => String(resolveCell(col.key, row[col.key]) ?? "")));
+
+  doc.autoTable({
+    head: tableHead,
+    body: tableBody,
+    startY: 32,
+    styles: { fontSize: 7, cellPadding: 2, overflow: "linebreak" },
+    headStyles: { fillColor: [15, 23, 42], textColor: 255, fontStyle: "bold" },
+    alternateRowStyles: { fillColor: [245, 247, 250] },
+    columnStyles: {
+      // detalle mas ancho
+      [pdfCols.findIndex(c => c.key === "detalle")]: { cellWidth: 55 },
+    },
+    margin: { top: 32, left: 6, right: 6 },
+    didDrawPage: (data) => {
+      const pageCount = doc.internal.getNumberOfPages();
+      const currentPage = doc.internal.getCurrentPageInfo().pageNumber;
+      doc.setFontSize(7);
+      doc.text("Pagina " + currentPage + " de " + pageCount, pageW - 12, doc.internal.pageSize.getHeight() - 5, { align: "right" });
+    },
+  });
+
+  doc.save(nombreArchivo + ".pdf");
+  toast({ title: "PDF generado", message: rows.length + " gestiones exportadas.", variant: "ok" });
+}
