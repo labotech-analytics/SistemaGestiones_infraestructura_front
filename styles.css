@@ -634,6 +634,20 @@ body.modal-open { overflow: hidden; }
   gap: 8px;
   flex-wrap: wrap;
 }
+.semaforo-badge{
+  display: inline-block;
+  padding: 3px 12px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: capitalize;
+  letter-spacing: .03em;
+}
+.semaforo-verde   { background: #4caf50; color: #fff; }
+.semaforo-rojo    { background: #e53935; color: #fff; }
+.semaforo-amarillo{ background: #f9a825; color: #333; }
+.resumen-field-readonly input[disabled],
+.resumen-field-readonly { opacity: .75; }
 .chip-stack{
   min-width: 126px;
   flex-direction: column;

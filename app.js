@@ -1158,6 +1158,17 @@ function resumenFieldRow(label, value) {
   `;
 }
 
+function resumenSemaforoRow(label, value) {
+  if (!value) return resumenFieldRow(label, null);
+  const cls = `semaforo-badge semaforo-${escapeHtml(value.toLowerCase())}`;
+  return `
+    <div class="resumen-field">
+      <span class="resumen-field-label">${escapeHtml(label)}</span>
+      <span class="${cls}">${escapeHtml(value)}</span>
+    </div>
+  `;
+}
+
 function renderResumenTerritorialEmpty(message = "Selecciona un departamento o una localidad para ver el resumen.") {
   const host = $id("resumenTerritorialContent") || $id("summaryContent");
   if (!host) return;
@@ -1382,6 +1393,12 @@ function renderResumenTerritorialLegacy() {
             <label>Localidad
               <input id="rtf_localidad" type="text" value="${escapeHtml(info.localidad || "")}" disabled />
             </label>
+            <label class="resumen-field-readonly">Tipo
+              <input type="text" value="${escapeHtml(info.tipo_localidad || "-")}" disabled />
+            </label>
+            <label class="resumen-field-readonly">Semáforo político
+              <span class="semaforo-badge semaforo-${escapeHtml((info.color_semaforo || "").toLowerCase())}">${escapeHtml(info.color_semaforo || "-")}</span>
+            </label>
             <label>Habitantes
               <input id="rtf_habitantes" type="number" min="0" value="${escapeHtml(info.habitantes ?? "")}" />
             </label>
@@ -1399,6 +1416,8 @@ function renderResumenTerritorialLegacy() {
           <div class="resumen-ficha-grid">
             ${resumenFieldRow("Departamento", info.departamento)}
             ${resumenFieldRow("Localidad", info.localidad)}
+            ${resumenFieldRow("Tipo", info.tipo_localidad)}
+            ${resumenSemaforoRow("Semáforo político", info.color_semaforo)}
             ${resumenFieldRow("Habitantes", info.habitantes)}
             ${resumenFieldRow("Electores", info.electores)}
             ${resumenFieldRow("Intendente / Jefe comunal", info.intendente_jefe_comunal)}
@@ -1552,6 +1571,12 @@ function renderResumenTerritorial() {
             <label>Localidad
               <input id="rtf_localidad" type="text" value="${escapeHtml(info.localidad || "")}" disabled />
             </label>
+            <label class="resumen-field-readonly">Tipo
+              <input type="text" value="${escapeHtml(info.tipo_localidad || "-")}" disabled />
+            </label>
+            <label class="resumen-field-readonly">Semáforo político
+              <span class="semaforo-badge semaforo-${escapeHtml((info.color_semaforo || "").toLowerCase())}">${escapeHtml(info.color_semaforo || "-")}</span>
+            </label>
             <label>Habitantes
               <input id="rtf_habitantes" type="number" min="0" value="${escapeHtml(info.habitantes ?? "")}" />
             </label>
@@ -1582,6 +1607,8 @@ function renderResumenTerritorial() {
             ` : `
               ${resumenFieldRow("Departamento", info.departamento)}
               ${resumenFieldRow("Localidad", info.localidad)}
+              ${resumenFieldRow("Tipo", info.tipo_localidad)}
+              ${resumenSemaforoRow("Semáforo político", info.color_semaforo)}
               ${resumenFieldRow("Habitantes", info.habitantes)}
               ${resumenFieldRow("Electores", info.electores)}
               ${resumenFieldRow("Intendente / Jefe comunal", info.intendente_jefe_comunal)}
