@@ -43,6 +43,9 @@ let CATALOGOS = {
   // Nuevos (front-only)
   tiposGestion: [],
   canalesOrigen: [],
+
+  // Módulos del sistema
+  modulos: [],
 };
 
 // ============================
@@ -147,6 +150,10 @@ function readToken() { return sessionStorage.getItem("idToken"); }
 
 function isAdmin() { return String(CURRENT_USER?.rol || "").toLowerCase() === "admin"; }
 function isSupervisor() { return String(CURRENT_USER?.rol || "").toLowerCase() === "supervisor"; }
+function canAccessModulo(modulo) {
+  if (isAdmin()) return true;
+  return (CURRENT_USER?.modulos || []).includes(modulo);
+}
 
 // ============================
 // Robust field getter
@@ -717,6 +724,7 @@ function wireUI() {
   $id("tab-resumen-territorial")?.addEventListener("click", () => setTab("resumen-territorial"));
   $id("tab-resumen")?.addEventListener("click", () => setTab("resumen-territorial"));
   $id("tab-usuarios")?.addEventListener("click", () => setTab("usuarios"));
+  $id("tab-cordon-cuneta")?.addEventListener("click", () => setTab("cordon-cuneta"));
 
   // paginador
   $id("btnPrev")?.addEventListener("click", () => pagePrev());
@@ -784,9 +792,16 @@ async function validateAuthOrThrow() {
     if (isAdmin()) show(tabUsuarios);
     else hide(tabUsuarios);
 
+    const tabCordonCuneta = $id("tab-cordon-cuneta");
+    if (tabCordonCuneta) {
+      if (canAccessModulo("cordon_cuneta")) show(tabCordonCuneta);
+      else hide(tabCordonCuneta);
+    }
+
     const savedTab = sessionStorage.getItem("activeTab");
-    if (savedTab && ["gestiones", "tablero", "resumen-territorial", "usuarios"].includes(savedTab)) {
+    if (savedTab && ["gestiones", "tablero", "resumen-territorial", "usuarios", "cordon-cuneta"].includes(savedTab)) {
       if (savedTab === "usuarios" && !isAdmin()) setTab("gestiones");
+      else if (savedTab === "cordon-cuneta" && !canAccessModulo("cordon_cuneta")) setTab("gestiones");
       else setTab(savedTab);
     } else {
       setTab("gestiones");
@@ -821,12 +836,14 @@ function setTab(tab) {
   $id("tab-resumen-territorial")?.classList.toggle("active", tab === "resumen-territorial");
   $id("tab-resumen")?.classList.toggle("active", tab === "resumen-territorial");
   $id("tab-usuarios")?.classList.toggle("active", tab === "usuarios");
+  $id("tab-cordon-cuneta")?.classList.toggle("active", tab === "cordon-cuneta");
 
   const panes = {
     gestiones: $id("view-gestiones"),
     tablero: $id("view-tablero"),
     "resumen-territorial": $id("view-resumen-territorial") || $id("view-resumen"),
     usuarios: $id("view-usuarios"),
+    "cordon-cuneta": $id("view-cordon-cuneta"),
   };
   Object.entries(panes).forEach(([k, el]) => el && el.classList.toggle("hidden", k !== tab));
 
@@ -839,6 +856,13 @@ function setTab(tab) {
       console.error(e);
       setAppError("No se pudo cargar Usuarios. " + (e?.message || String(e)));
     });
+  }
+
+  if (tab === "cordon-cuneta") {
+    if (!canAccessModulo("cordon_cuneta")) {
+      setTab("gestiones");
+      return;
+    }
   }
 
   if (tab === "tablero") {
@@ -2420,6 +2444,8 @@ function clearUserForm() {
   if (activo) activo.checked = true;
 
   if (email) email.dataset.mode = "create";
+
+  hide($id("userModulosPanel"));
 }
 
 function fillUserForm(u) {
@@ -2535,7 +2561,137 @@ function editUser(email) {
   }
   fillUserForm(u);
   setUsersHint(`Editando: ${normalizeEmail(email)}`);
+  loadUserModulos(normalizeEmail(email)).catch(console.error);
 }
+
+// ── Módulos por usuario ───────────────────────────────────────────────────────
+
+function setModulosError(msg) {
+  const el = $id("modulosError");
+  if (!el) return;
+  el.textContent = msg || "";
+  msg ? show(el) : hide(el);
+}
+
+async function loadUserModulos(email) {
+  const panel = $id("userModulosPanel");
+  if (!panel || !isAdmin()) return;
+
+  if (!CATALOGOS.modulos.length) {
+    try {
+      const mods = await api("/catalogos/modulos");
+      CATALOGOS.modulos = mods || [];
+      const sel = $id("u_modulo_nuevo");
+      if (sel && CATALOGOS.modulos.length) {
+        CATALOGOS.modulos.forEach(m => {
+          const opt = document.createElement("option");
+          opt.value = m.id;
+          opt.textContent = m.nombre;
+          sel.appendChild(opt);
+        });
+      }
+    } catch (e) {
+      console.warn("No se pudo cargar catálogo de módulos:", e);
+    }
+  }
+
+  try {
+    const modulos = await api(`/usuarios/${encodeURIComponent(email)}/modulos`);
+    renderModulosPanel(email, modulos || []);
+    show(panel);
+  } catch (e) {
+    console.error("loadUserModulos:", e);
+  }
+}
+
+function renderModulosPanel(email, modulos) {
+  const list = $id("userModulosList");
+  if (!list) return;
+
+  list.innerHTML = "";
+
+  if (!modulos.length) {
+    const p = document.createElement("p");
+    p.className = "hint";
+    p.textContent = "Sin módulos habilitados.";
+    list.appendChild(p);
+    return;
+  }
+
+  modulos.forEach(m => {
+    const nombre = escapeHtml(m.modulo_nombre || m.modulo);
+    const rol = escapeHtml(m.rol_modulo || "");
+    const emailSafe = escapeHtml(email);
+    const moduloSafe = escapeHtml(m.modulo);
+    const row = document.createElement("div");
+    row.className = "row between";
+    row.style.cssText = "gap:.5rem;padding:.25rem 0;align-items:center;";
+    row.dataset.modulo = m.modulo;
+    row.innerHTML = `
+      <span style="flex:1">${nombre}</span>
+      <span class="pill">${rol}</span>
+      <button class="btn btn-sm" type="button"
+        onclick="removeModuloFromUser('${emailSafe}','${moduloSafe}')">
+        Quitar
+      </button>
+    `;
+    list.appendChild(row);
+  });
+}
+
+async function addModuloToUser() {
+  if (!isAdmin()) return;
+
+  setModulosError("");
+
+  const emailEl = $id("u_email");
+  const email = normalizeEmail(emailEl?.value);
+  if (!email) return setModulosError("Seleccioná un usuario primero.");
+
+  const modulo = $id("u_modulo_nuevo")?.value;
+  const rol_modulo = $id("u_modulo_rol")?.value;
+
+  if (!modulo) return setModulosError("Seleccioná un módulo.");
+  if (!rol_modulo) return setModulosError("Seleccioná el rol del módulo.");
+
+  setGlobalLoading(true, "Habilitando módulo...");
+  try {
+    await api(`/usuarios/${encodeURIComponent(email)}/modulos`, {
+      method: "POST",
+      body: { modulo, rol_modulo },
+    });
+    toast({ title: "Módulo habilitado", message: `${modulo} → ${email}`, variant: "ok" });
+    $id("u_modulo_nuevo").value = "";
+    await loadUserModulos(email);
+  } catch (e) {
+    console.error(e);
+    setModulosError("No se pudo agregar el módulo. " + (e?.message || String(e)));
+  } finally {
+    setGlobalLoading(false);
+  }
+}
+
+async function removeModuloFromUser(email, modulo) {
+  if (!isAdmin()) return;
+  if (!confirm(`Quitar módulo "${modulo}" al usuario ${email}?`)) return;
+
+  setModulosError("");
+  setGlobalLoading(true, "Quitando módulo...");
+  try {
+    await api(`/usuarios/${encodeURIComponent(email)}/modulos/${encodeURIComponent(modulo)}`, {
+      method: "DELETE",
+    });
+    toast({ title: "Módulo quitado", message: `${modulo} → ${email}`, variant: "ok" });
+    await loadUserModulos(email);
+  } catch (e) {
+    console.error(e);
+    setModulosError("No se pudo quitar el módulo. " + (e?.message || String(e)));
+  } finally {
+    setGlobalLoading(false);
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 
 async function upsertUser() {
   if (!isAdmin()) return;
@@ -2668,6 +2824,8 @@ window.upsertUser = upsertUser;
 window.clearUserForm = clearUserForm;
 window.editUser = editUser;
 window.disableUser = disableUser;
+window.addModuloToUser = addModuloToUser;
+window.removeModuloFromUser = removeModuloFromUser;
 
 // Util
 window.copyToClipboard = copyToClipboard;

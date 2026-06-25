@@ -81,6 +81,11 @@
           Usuarios
           <span class="pill" id="pillAdmin" title="Solo Admin">Admin</span>
         </button>
+
+        <button class="tab hidden" id="tab-cordon-cuneta" type="button" data-view="cordon-cuneta" role="tab"
+          aria-controls="view-cordon-cuneta">
+          Cordón Cuneta
+        </button>
       </div>
 
       <!-- VIEW: GESTIONES -->
@@ -301,6 +306,35 @@
 
               <p class="hint" id="usersHint"></p>
               <p class="error hidden" id="usersError" role="alert"></p>
+
+              <!-- Panel de módulos — visible al seleccionar un usuario para editar -->
+              <div id="userModulosPanel" class="hidden" style="margin-top:1.5rem; border-top: 1px solid var(--border); padding-top: 1rem;">
+                <h4 class="h4">Módulos habilitados</h4>
+                <div id="userModulosList" class="modulos-list" style="margin: 0.5rem 0 1rem;"></div>
+
+                <div class="form-grid form-grid-1">
+                  <label>Módulo a agregar
+                    <select id="u_modulo_nuevo">
+                      <option value="">(Seleccionar módulo)</option>
+                    </select>
+                  </label>
+
+                  <label>Rol en el módulo
+                    <select id="u_modulo_rol">
+                      <option value="Supervisor">Supervisor</option>
+                      <option value="Operador" selected>Operador</option>
+                      <option value="Consulta">Consulta</option>
+                    </select>
+                  </label>
+                </div>
+
+                <div class="actions-row" style="margin-top:0.5rem;">
+                  <button class="btn primary" type="button" onclick="addModuloToUser()">+ Agregar módulo</button>
+                </div>
+
+                <p class="hint hidden" id="modulosHint"></p>
+                <p class="error hidden" id="modulosError" role="alert"></p>
+              </div>
             </div>
 
             <div class="users-list">
@@ -313,6 +347,21 @@
                 <table class="grid" id="usersGrid"></table>
               </div>
             </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- VIEW: CORDÓN CUNETA -->
+      <section id="view-cordon-cuneta" class="view hidden" role="tabpanel" aria-labelledby="tab-cordon-cuneta">
+        <div class="card">
+          <div class="card-head row">
+            <div>
+              <h3 class="h3">Cordón Cuneta</h3>
+              <p class="hint">Programa de financiamiento para obras de cordón cuneta y adoquinado en municipios de Córdoba.</p>
+            </div>
+          </div>
+          <div style="padding: 2rem; text-align: center; color: var(--text-muted);">
+            <p>Módulo en desarrollo — disponible próximamente.</p>
           </div>
         </div>
       </section>
