@@ -1,10 +1,10 @@
 // ── Detección automática de ambiente ─────────────────────────────────────────
-// Local (localhost / 127.0.0.1)  → backend dev  (puerto 8081)
+// ?local=1  (query param)                          → backend local (8081)
 // GitHub Pages /SistemaGestiones_infraestructura_front/ → backend cert
-// Cualquier otro origen           → backend dev  (Cloud Run dev)
-const _h = window.location.hostname;
+// Cualquier otro origen (incluso localhost)         → backend dev (Cloud Run dev)
+const _forceLocal = new URLSearchParams(window.location.search).get("backend") === "local";
 const _p = window.location.pathname;
-const API_BASE = (_h.includes("localhost") || _h.includes("127.0.0.1"))
+const API_BASE = _forceLocal
   ? "http://localhost:8081"
   : _p.startsWith("/SistemaGestiones_infraestructura_front/")
     ? "https://infraestructura-gestioninterna-354063050046.southamerica-east1.run.app"
