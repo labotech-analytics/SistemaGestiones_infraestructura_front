@@ -1,5 +1,15 @@
-//const API_BASE = "https://infraestructura-gestioninterna-354063050046.southamerica-east1.run.app";
-const API_BASE = "http://localhost:8081";
+// ── Detección automática de ambiente ─────────────────────────────────────────
+// Local (localhost / 127.0.0.1)  → backend dev  (puerto 8081)
+// GitHub Pages /SistemaGestiones_infraestructura_front/ → backend cert
+// Cualquier otro origen           → backend dev  (Cloud Run dev)
+const _h = window.location.hostname;
+const _p = window.location.pathname;
+const API_BASE = (_h.includes("localhost") || _h.includes("127.0.0.1"))
+  ? "http://localhost:8081"
+  : _p.startsWith("/SistemaGestiones_infraestructura_front/")
+    ? "https://infraestructura-gestioninterna-354063050046.southamerica-east1.run.app"
+    : "https://infraestructura-gestioninterna-dev-354063050046.southamerica-east1.run.app";
+// ─────────────────────────────────────────────────────────────────────────────
 const GOOGLE_CLIENT_ID = "354063050046-fkp06ao8aauems1gcj4hlngljf56o3cj.apps.googleusercontent.com";
 
 let idToken = null;
